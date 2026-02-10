@@ -212,6 +212,14 @@ All settings are configurable through the interactive menu. Config is stored in 
 
 <div align="center">
 
+### 📸 Screenshots
+
+<div align="center">
+<img src="assets/menu.png" width="600">
+<img src="assets/download.png" width="600">
+<img src="assets/stats.png" width="600">
+</div>
+
 ### 📄 License
 
 MIT © KROFN
