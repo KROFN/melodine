@@ -1,0 +1,30 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Virtual env
+venv/
+.venv/
+env/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Melodine runtime files
+config.yaml
+melodine.db
+failed_tracks.txt
+downloads/
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
