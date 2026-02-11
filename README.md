@@ -228,4 +228,8 @@ MIT © KROFN
 
 ⭐ **Star this repo if you find it useful!** ⭐
 
+---
+
+Особая благодарность за вдохновение и текстовый список песен: [https://aleqsanbr.dev/](https://aleqsanbr.dev/)
+
 </div>
