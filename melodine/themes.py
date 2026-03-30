@@ -5,21 +5,17 @@ from dataclasses import dataclass
 class Theme:
     name: str
     label: str
-    # Основные
     primary: str
     secondary: str
     accent: str
-    # Статусы
     success: str
     error: str
     warning: str
     info: str
-    # UI
     border: str
     title: str
     subtitle: str
     muted: str
-    # Прогресс-бар
     bar_complete: str
     bar_remaining: str
 

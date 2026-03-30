@@ -23,7 +23,7 @@ from melodine.display import console
 
 
 class DownloadResult:
-    __slots__ = ("query", "artist", "title", "status", "attempts", "file_path", "file_size", "error")
+    __slots__ = ('query', 'artist', 'title', 'status', 'attempts', 'file_path', 'file_size', 'error')
 
     def __init__(self, query, artist, title):
         self.query = query

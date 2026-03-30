@@ -8,6 +8,7 @@ from rich import box
 from melodine.themes import Theme
 from melodine.locales import t
 from melodine.utils import format_size, format_time
+from melodine.search import format_duration, format_views
 from melodine import __version__
 
 console = Console()
@@ -79,7 +80,6 @@ def show_stats(theme: Theme, stats: dict):
         f"[{theme.info}]{t('stats_time')}    {format_time(stats['total_time'])}[/]"
     )
 
-    # weekly chart
     daily = stats.get("daily", [])
     peak = max((d["count"] for d in daily), default=1) or 1
     bars = "░▁▂▃▄▅▆▇█"
@@ -112,8 +112,6 @@ def show_failed_tracks(theme: Theme, tracks: list[str], max_show=15):
 
 
 def show_search_results(theme: Theme, results: list[dict]):
-    from melodine.search import format_duration, format_views
-
     tbl = Table(title="🔍", border_style=theme.border, box=box.ROUNDED)
     tbl.add_column("#", style=theme.muted, width=3)
     tbl.add_column("Title", style=theme.primary)

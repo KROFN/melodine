@@ -1,0 +1,18 @@
+theme: dracula
+language: ru
+download:
+  threads: 4
+  pause: 0.5
+  retry_attempts: 3
+  retry_delay: 5.0
+  quality: 320
+  max_duration: 600
+  timeout: 30
+  smart_search: true
+  download_covers: false
+paths:
+  output: ./downloads
+  failed_log: ./failed_tracks.txt
+metadata:
+  add_tags: true
+  download_covers: false

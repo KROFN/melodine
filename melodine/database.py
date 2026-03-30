@@ -101,7 +101,6 @@ def get_stats() -> dict:
         "SELECT COALESCE(SUM(duration_seconds), 0) as t FROM sessions"
     ).fetchone()["t"]
 
-    # По дням (последние 7)
     daily = []
     for i in range(6, -1, -1):
         date = (datetime.now() - timedelta(days=i)).strftime("%Y-%m-%d")
@@ -112,7 +111,6 @@ def get_stats() -> dict:
         day_name = (datetime.now() - timedelta(days=i)).strftime("%a")
         daily.append({"day": day_name, "date": date, "count": count})
 
-    # Топ артисты
     top_artists = conn.execute("""
         SELECT artist, COUNT(*) as c FROM downloads
         WHERE status='success' AND artist != ''

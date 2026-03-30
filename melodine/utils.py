@@ -3,6 +3,32 @@ from pathlib import Path
 from melodine.locales import t
 
 
+# Разделители артист - трек (русское тире, обычное тире, дефис)
+_DASHES = [" — ", " – ", " - ", "—", "–", "-"]
+
+# Паттерны для удаления нумерации треков
+_NUM_PREFIX = [
+    r'^\d+\.\s*',      # "1. ", "2. "
+    r'^\d+\)\s*',      # "1) ", "2) "
+    r'^\d+\-\s*',      # "1- ", "2- "
+    r'^№\s*\d+\s*',    # "№ 1 ", "№1 "
+]
+
+# Паттерны "мусорных" строк (пропускаем)
+_JUNK = [
+    r'^tracklist',
+    r'^треклист',
+    r'^альбом',
+    r'^album',
+    r'^artist:',
+    r'^артист:',
+    r'^total:',
+    r'^всего:',
+    r'^duration:',
+    r'^длительность:',
+]
+
+
 def sanitize_filename(name: str) -> str:
     s = re.sub(r'[<>:"/\\|?*]', '_', name)
     return s.strip('. ')[:200]
@@ -28,27 +54,6 @@ def format_time(seconds: float) -> str:
     m, _ = divmod(rem, 60)
     return t("time_hour", h=h, m=m)
 
-
-# --- playlist parser ---
-
-_NUM_PREFIX = [
-    r'^\d{1,4}\.\s+',
-    r'^\d{1,4}\)\s+',
-    r'^\d{1,4}\]\s+',
-    r'^#\d{1,4}\s+',
-    r'^\d{1,4}\s*[-–—]\s+',
-    r'^\d{1,4}\s+',
-]
-
-_JUNK = [
-    r'^#', r'^//', r'^--',
-    r'^\d+$',
-    r'^(всего|total|итого|экспорт|export|дата|date)\s*[:：]',
-    r'^https?://', r'^www\.',
-    r'^[=\-*_]{3,}',
-]
-
-_DASHES = [' - ', ' — ', ' – ', ' − ', ' ‐ ', ' ─ ']
 
 
 def parse_playlist(filepath: str) -> list[dict]:

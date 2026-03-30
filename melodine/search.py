@@ -1,3 +1,4 @@
+import re
 import yt_dlp
 
 
@@ -40,8 +41,6 @@ def generate_search_queries(artist: str, title: str) -> list[str]:
     queries.append(original)
 
     if artist:
-        # Убрать feat., prod., скобки
-        import re
         clean_artist = re.sub(r'\(.*?\)', '', artist).strip()
         clean_artist = re.sub(r'feat\.?.*', '', clean_artist, flags=re.IGNORECASE).strip()
         clean_title = re.sub(r'\(.*?\)', '', title).strip()
@@ -49,15 +48,11 @@ def generate_search_queries(artist: str, title: str) -> list[str]:
         if f"{clean_artist} - {clean_title}" != original:
             queries.append(f"{clean_artist} - {clean_title}")
 
-        # Только первый артист
         first_artist = re.split(r'[,&/]', artist)[0].strip()
         if first_artist != artist:
             queries.append(f"{first_artist} - {title}")
 
-        # Только название
         queries.append(title)
-
-        # С "official audio"
         queries.append(f"{first_artist} - {title} official audio")
 
     return queries

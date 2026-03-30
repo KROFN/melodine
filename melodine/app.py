@@ -1,4 +1,4 @@
-import os, sys, signal
+import os, sys, signal, subprocess
 from InquirerPy import inquirer
 from InquirerPy.separator import Separator
 
@@ -14,24 +14,6 @@ from melodine.database import init_db, get_stats, get_failed_count, get_failed_t
 from melodine.downloader import DownloadEngine
 from melodine.search import search_tracks, format_duration
 from melodine.utils import parse_playlist, sanitize_filename
-
-
-def _v_int(lo, hi):
-    def check(val):
-        try:
-            return lo <= int(val) <= hi
-        except (ValueError, TypeError):
-            return False
-    return check
-
-
-def _v_float(lo, hi):
-    def check(val):
-        try:
-            return lo <= float(val) <= hi
-        except (ValueError, TypeError):
-            return False
-    return check
 
 
 class MelodineApp:
@@ -70,8 +52,6 @@ class MelodineApp:
         set_language(lang)
         save_config(self.config)
 
-    # --- main menu ---
-
     def _main_menu(self):
         draw_header(self.theme)
 
@@ -93,24 +73,23 @@ class MelodineApp:
             pointer="❯", qmark="🎵", amark="🎵",
         ).execute()
 
-        handlers = {
-            "download": self._download_playlist,
-            "retry": self._retry_failed,
-            "search": self._search_track,
-            "stats": self._show_stats,
-            "settings": self._settings_menu,
-            "exit": self._exit,
-        }
-        fn = handlers.get(action)
-        if fn:
-            fn()
+        if action == "download":
+            self._download_playlist()
+        elif action == "retry":
+            self._retry_failed()
+        elif action == "search":
+            self._search_track()
+        elif action == "stats":
+            self._show_stats()
+        elif action == "settings":
+            self._settings_menu()
+        elif action == "exit":
+            self._exit()
 
     def _exit(self):
         draw_header(self.theme)
         show_message(self.theme, t("goodbye"), "muted")
         sys.exit(0)
-
-    # --- download ---
 
     def _download_playlist(self):
         draw_header(self.theme)
@@ -226,7 +205,6 @@ class MelodineApp:
         elif choice == "open":
             self._open_folder(self.config.paths.output)
 
-    # --- search ---
 
     def _search_track(self):
         draw_header(self.theme)
@@ -269,7 +247,6 @@ class MelodineApp:
             "search",
         )
 
-    # --- stats ---
 
     def _show_stats(self):
         draw_header(self.theme)
@@ -280,7 +257,6 @@ class MelodineApp:
             show_stats(self.theme, stats)
         wait_enter(self.theme)
 
-    # --- settings ---
 
     def _settings_menu(self):
         while True:
@@ -305,18 +281,20 @@ class MelodineApp:
 
             if action == "back":
                 break
-
-            handler = {
-                "download": self._set_download,
-                "theme": self._set_theme,
-                "paths": self._set_paths,
-                "metadata": self._set_metadata,
-                "lang": self._set_language,
-                "show": self._set_show,
-                "reset": self._set_reset,
-            }.get(action)
-            if handler:
-                handler()
+            elif action == "download":
+                self._set_download()
+            elif action == "theme":
+                self._set_theme()
+            elif action == "paths":
+                self._set_paths()
+            elif action == "metadata":
+                self._set_metadata()
+            elif action == "lang":
+                self._set_language()
+            elif action == "show":
+                self._set_show()
+            elif action == "reset":
+                self._set_reset()
 
     def _set_download(self):
         draw_header(self.theme)
@@ -326,25 +304,25 @@ class MelodineApp:
         cfg.threads = int(inquirer.text(
             message=t("cfg_threads", v=cfg.threads), default=str(cfg.threads),
             qmark="⚡", amark="⚡",
-            validate=_v_int(1, 15), invalid_message=t("cfg_threads_err"),
+            validate=lambda v: 1 <= int(v) <= 15, invalid_message=t("cfg_threads_err"),
         ).execute())
 
         cfg.pause = float(inquirer.text(
             message=t("cfg_pause", v=cfg.pause), default=str(cfg.pause),
             qmark="⏱ ", amark="⏱ ",
-            validate=_v_float(0, 10), invalid_message=t("cfg_pause_err"),
+            validate=lambda v: 0 <= float(v) <= 10, invalid_message=t("cfg_pause_err"),
         ).execute())
 
         cfg.retry_attempts = int(inquirer.text(
             message=t("cfg_retry", v=cfg.retry_attempts), default=str(cfg.retry_attempts),
             qmark="🔄", amark="🔄",
-            validate=_v_int(0, 10), invalid_message=t("cfg_retry_err"),
+            validate=lambda v: 0 <= int(v) <= 10, invalid_message=t("cfg_retry_err"),
         ).execute())
 
         cfg.retry_delay = float(inquirer.text(
             message=t("cfg_retry_delay", v=cfg.retry_delay), default=str(cfg.retry_delay),
             qmark="⏳", amark="⏳",
-            validate=_v_float(0, 60), invalid_message=t("cfg_retry_delay_err"),
+            validate=lambda v: 0 <= float(v) <= 60, invalid_message=t("cfg_retry_delay_err"),
         ).execute())
 
         cfg.quality = int(inquirer.select(
@@ -356,13 +334,13 @@ class MelodineApp:
         cfg.max_duration = int(inquirer.text(
             message=t("cfg_duration", v=cfg.max_duration), default=str(cfg.max_duration),
             qmark="⏰", amark="⏰",
-            validate=_v_int(60, 3600), invalid_message=t("cfg_duration_err"),
+            validate=lambda v: 60 <= int(v) <= 3600, invalid_message=t("cfg_duration_err"),
         ).execute())
 
         cfg.timeout = int(inquirer.text(
             message=t("cfg_timeout", v=cfg.timeout), default=str(cfg.timeout),
             qmark="🌐", amark="🌐",
-            validate=_v_int(5, 120), invalid_message=t("cfg_timeout_err"),
+            validate=lambda v: 5 <= int(v) <= 120, invalid_message=t("cfg_timeout_err"),
         ).execute())
 
         cfg.smart_search = inquirer.confirm(
@@ -465,7 +443,6 @@ class MelodineApp:
             console.print(f"\n[{self.theme.muted}]{t('settings_cancelled')}[/]")
         wait_enter(self.theme)
 
-    # --- helpers ---
 
     @staticmethod
     def _fname(track):
@@ -475,7 +452,6 @@ class MelodineApp:
 
     @staticmethod
     def _open_folder(path):
-        import subprocess
         p = os.path.abspath(path)
         os.makedirs(p, exist_ok=True)
         try:

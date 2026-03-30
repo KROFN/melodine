@@ -33,7 +33,7 @@ def add_cover(filepath: str, cover_data: bytes, mime: str = "image/jpeg") -> boo
         tags["APIC"] = APIC(
             encoding=3,
             mime=mime,
-            type=3,  # Cover (front)
+            type=3,
             desc="Cover",
             data=cover_data,
         )

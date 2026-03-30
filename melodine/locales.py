@@ -2,7 +2,6 @@ _lang = "ru"
 
 _strings = {
     "ru": {
-        # -- главное меню --
         "menu_prompt": "Что делаем?",
         "menu_download": "📥  Скачать плейлист",
         "menu_retry": "🔄  Докачать неудачные",
@@ -14,7 +13,6 @@ _strings = {
         "menu_exit": "❌  Выход",
         "goodbye": "👋 До встречи!",
 
-        # -- скачивание --
         "dl_title": "📥 Скачивание плейлиста",
         "dl_filepath": "Путь к файлу плейлиста:",
         "dl_file_not_found": "Файл не найден",
@@ -26,19 +24,16 @@ _strings = {
         "dl_progress_title": "⬇ Прогресс",
         "dl_last": "Последний",
 
-        # -- retry --
         "retry_title": "🔄 Докачка неудачных треков",
         "retry_none": "✅ Нет неудачных треков!",
         "retry_found": "Найдено {n} неудачных треков",
         "retry_confirm": "Попробовать скачать {n} треков?",
         "retry_again": "🔄 Попробовать неудачные ещё раз",
 
-        # -- post-download --
         "post_open": "📂 Открыть папку загрузок",
         "post_menu": "🏠 В главное меню",
         "post_prompt": "Что дальше?",
 
-        # -- поиск --
         "search_title": "🔍 Поиск трека",
         "search_prompt": "Введите запрос:",
         "search_empty": "Введите запрос",
@@ -47,7 +42,6 @@ _strings = {
         "search_select": "Выберите трек:",
         "search_cancel": "❌ Отмена",
 
-        # -- статистика --
         "stats_empty": "📭 Пока нет данных. Скачайте что-нибудь! 🎵",
         "stats_title": "📊 Статистика",
         "stats_total": "📦 Всего скачано:",
@@ -59,7 +53,6 @@ _strings = {
         "stats_week": "📈 Последние 7 дней:",
         "stats_top": "🏆 Топ артисты:",
 
-        # -- настройки --
         "settings_title": "⚙️  Настройки",
         "settings_prompt": "Раздел настроек",
         "settings_download": "🔧 Параметры скачивания",
@@ -75,7 +68,6 @@ _strings = {
         "settings_reset_done": "✅ Настройки сброшены!",
         "settings_cancelled": "Отменено",
 
-        # -- параметры скачивания --
         "cfg_threads": "Потоки [{v}]:",
         "cfg_threads_err": "Целое число от 1 до 15",
         "cfg_pause": "Пауза между треками, сек [{v}]:",
@@ -93,17 +85,14 @@ _strings = {
         "cfg_tags": "Добавлять ID3 теги (артист, название)?",
         "cfg_covers": "Скачивать обложки? (замедляет загрузку)",
 
-        # -- тема --
         "theme_current": "Текущая:",
         "theme_select": "Выберите тему:",
         "theme_changed": "✅ Тема: {name}",
 
-        # -- пути --
         "paths_current": "Текущая:",
         "paths_prompt": "Новая папка загрузок:",
         "paths_set": "✅ Папка: {path}",
 
-        # -- display --
         "subtitle": "Твой плейлист. Скачан. Красиво.",
         "welcome_title": "✨ Добро пожаловать!",
         "welcome_text": "👋 Первый запуск! Создан config.yaml",
@@ -134,7 +123,6 @@ _strings = {
         "config_param": "Параметр",
         "config_value": "Значение",
 
-        # -- форматирование --
         "time_sec": "{v} сек",
         "time_min": "{m} мин {s} сек",
         "time_hour": "{h}ч {m}мин",
