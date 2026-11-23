@@ -9,11 +9,14 @@
  |_|  |_|\___|_|\___/ \__,_|_|_| |_|\___|
 ```
 
-**Your playlist. Downloaded. Beautifully.**
+**Your playlist. Downloaded. Beautifully. — Studio-grade music downloader for the terminal.**
 
-[![Python](https://img.shields.io/badge/Python-3.10+-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://python.org)
-[![License](https://img.shields.io/badge/License-MIT-green?style=for-the-badge)](LICENSE)
-[![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux%20%7C%20macOS-blue?style=for-the-badge)]()
+[![CI](https://github.com/KROFN/melodine/actions/workflows/ci.yml/badge.svg)](https://github.com/KROFN/melodine/actions/workflows/ci.yml)
+[![Python](https://img.shields.io/badge/Python-3.10%20%7C%203.11%20%7C%203.12%20%7C%203.13-3776AB?style=flat&logo=python&logoColor=white)](https://python.org)
+[![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
+[![Tests](https://img.shields.io/badge/tests-201%20passed-brightgreen)]()
+[![License](https://img.shields.io/badge/License-MIT-green)](LICENSE)
+[![Platforms](https://img.shields.io/badge/platform-Linux%20%7C%20Windows%20%7C%20macOS-lightgrey)]()
 
 [English](#english) · [Русский](#русский)
 
@@ -21,201 +24,289 @@
 
 ---
 
-## Русский
+## English
 
-### 🎵 Что это?
+**Melodine v2** downloads music from YouTube the way a self-respecting music hoarder wants it:
+**studio audio instead of music videos**, non-music segments cut out, **synced karaoke lyrics**,
+square high-res covers, correct album/year/genre tags, one-click codec presets and optional
+**EBU R128 loudness normalization** — through a premium TUI *or* a fast headless CLI.
 
-**Melodine** — интерактивный консольный загрузчик музыки. Скачивает треки из текстового плейлиста, конвертирует в MP3, добавляет теги — всё через красивый TUI-интерфейс.
+### Why Melodine?
 
-### ✨ Возможности
+| Feature | Melodine v2 | raw yt-dlp | spotDL | ytmdl |
+|---|:---:|:---:|:---:|:---:|
+| Anti-MV studio scoring (picks `- Topic` / `Official Audio`) | ✔ | – | partial | partial |
+| SponsorBlock cut of intros/skits/outros | ✔ | manual flags | – | – |
+| Synced karaoke `.lrc` (LRCLIB) embedded + sidecar | ✔ | – | – | plain only |
+| 16:9 → 1:1 smart artwork cropping | ✔ | – | ✔ | ✔ |
+| iTunes / MusicBrainz metadata enrichment | ✔ | – | Spotify | ✔ |
+| EBU R128 two-pass loudness normalization | ✔ | manual | – | – |
+| Opus / MP3 / M4A / FLAC profiles in one click | ✔ | manual | ✔ | ✔ |
+| Smart dedup (source_id + fuzzy artist/title/duration) | ✔ | – | – | – |
+| Watchlist subscriptions → M3U8 playlists | ✔ | – | – | – |
+| Beautiful TUI with 12 themes + RU/EN hotkeys | ✔ | – | – | – |
+| Headless CLI (`get/sync/lyrics/doctor/export`) | ✔ | CLI only | CLI | CLI |
 
-| Фича | Описание |
-|------|----------|
-| 📥 **Скачивание плейлистов** | Многопоточная загрузка из `.txt` файлов |
-| 🔍 **Поиск треков** | Поиск с превью — выбирай нужный вариант |
-| 🧠 **Smart Search** | Если трек не найден — пробует разные варианты запроса |
-| 🔄 **Auto-retry** | Повторные попытки при ошибках соединения |
-| 🏷️ **ID3-теги** | Автоматически прописывает артиста и название |
-| 📊 **Статистика** | Графики, топ артистов, история загрузок |
-| 🎨 **7 тем** | Dracula, Nord, Monokai, Cyberpunk и другие |
-| 🌐 **RU / EN** | Полная локализация интерфейса |
-| ⏸ **Пауза** | Ctrl+C — пауза, не потеря прогресса |
-| 📋 **Умный парсер** | Переваривает номера строк, мусор, разные форматы |
+### The six killer features
 
-### 📦 Установка
+1. **Anti-MV Studio Scorer.** Every search candidate is scored 0–100. Official audio
+   channels (`Artist - Topic`), `Official Audio` uploads and duration matches rise to the top;
+   story-driven music videos, lives, covers, `slowed + reverb`, 8D, reactions and Shorts sink —
+   unless you explicitly ask (`--live`, `--remix`, `--cover`, `--instrumental`). The TUI shows
+   the full scoring trail for every candidate.
+2. **SponsorBlock Studio Cut.** Staged exactly like the upstream yt-dlp CLI: `SponsorBlock`
+   collects segment timestamps before the download (`after_filter`), the audio is extracted,
+   then `ModifyChapters` cuts `music_offtopic`, `sponsor`, `intro`, `outro` and `selfpromo`
+   from the extracted file — so skits and sponsor reads never reach your library.
+3. **Synced Karaoke Lyrics (LRCLIB).** Polite client for the free [lrclib.net](https://lrclib.net)
+   API: exact lookup, fuzzy fallback, duration filtering, synced preferred over plain. Lyrics are
+   embedded as `USLT`/`SYLT` (MP3), `LYRICS`/`SYNCEDLYRICS` (FLAC/Opus) or `©lyr` (M4A) **and**
+   saved as a sidecar `.lrc` for players and karaoke nights.
+4. **Smart Artwork Cropper + Metadata Enricher.** YouTube's 16:9 thumbnails with black bars are
+   auto-cropped to a perfect 1000×1000 cover before embedding. Album, year, genre and track
+   number come from the iTunes Search API with a MusicBrainz fallback, falling back to
+   cleaned source tags (no more `(Official Video)` in your library).
+5. **EBU R128 Normalization & Codec Profiles.** `Opus 160k transparent`, `MP3 320k CBR`,
+   `M4A AAC 256k` or `FLAC` (lossless container — honest caveat: the source is YouTube's
+   audio, which is already lossy; FLAC keeps it bit-exact from there, it cannot restore
+   what YouTube threw away) in one flag, plus optional two-pass
+   `loudnorm=I=-14:TP=-1.5:LRA=11` so the whole playlist plays at one loudness.
+6. **Smart Dedup, Watchlist & M3U8.** A unique index (`source_id` + fuzzy
+   `normalized artist + title + duration`) never downloads a track twice. Subscribe to a
+   playlist or channel, and `melodine sync` pulls only the new tracks into
+   `{artist}/{album}/{track_num} - {title}.{ext}` folders and refreshes a local `.m3u8`.
 
-**1. Клонируй репозиторий:**
+### Architecture
+
+```
+┌──────────────────────────────────────────────────────────────────────────┐
+│                            UX  (dual mode)                               │
+│  melodine ─ TUI (rich): dashboard │ search │ queue │ library │ settings  │
+│  mld ────── CLI (typer): get │ sync │ lyrics │ doctor │ export │ watch   │
+└───────────────┬──────────────────────────────────┬───────────────────────┘
+                │                                  │
+┌───────────────▼──────────────┐   ┌───────────────▼───────────────────────┐
+│           core               │   │              services                 │
+│  config (pydantic, v1↔v2)    │   │  search + Anti-MV scoring             │
+│  logging (queue → rotate)    │   │  downloader (yt-dlp pipeline)         │
+│  shutdown (graceful Ctrl+C)  │   │   ├─ SponsorBlock + ModifyChapters    │
+└───────────────┬──────────────┘   │   ├─ FFmpegExtractAudio (codecs)      │
+                │                  │   ├─ loudnorm (EBU R128, 2-pass)      │
+┌───────────────▼──────────────┐   │   ├─ artwork cropper (Pillow 1:1)    │
+│            db                │   │   ├─ tagger (mutagen USLT/SYLT/…)    │
+│  tracks (dedup index)        │   │   └─ lyrics (LRCLIB client)          │
+│  history (v1 compatible)     │   │  metadata (iTunes → MusicBrainz)     │
+│  watchlist + queue_state     │   │  watchlist sync → M3U8 │ doctor │ export │
+└──────────────────────────────┘   └───────────────────────────────────────┘
+```
+
+### Quick start
+
+**Requirements:** Python 3.10+ and FFmpeg (`winget install FFmpeg` / `sudo apt install ffmpeg` / `brew install ffmpeg`).
 
 ```bash
-git clone https://github.com/KROFN/melodine.git
-cd melodine
+# from GitHub (the PyPI name "melodine" belongs to an unrelated project;
+# once published, the distribution will be "krofn-melodine")
+uvx --from git+https://github.com/KROFN/melodine.git melodine
+
+# pipx
+pipx install git+https://github.com/KROFN/melodine.git
+
+# pip
+pip install git+https://github.com/KROFN/melodine.git
 ```
 
-**2. Установи зависимости:**
+> **Note:** do **not** `pip install melodine` — that name on PyPI is a
+> different project by another author. Melodine's import package and the
+> `melodine` / `mld` commands stay the same; only the distribution name
+> differs (`krofn-melodine` when it is published).
+
+Run `melodine` with no arguments for the interactive TUI, or use the headless CLI:
 
 ```bash
-pip install -r requirements.txt
+melodine get "Daft Punk - Around the World"     # search → best studio audio → full pipeline
+melodine get "https://youtu.be/…"               # direct URL
+melodine get my_playlist.txt                    # batch: dirty .txt playlists still welcome
+melodine get "Muse - Hysteria" --live           # intent: prefer live versions
+melodine get "Track" -f opus --normalize        # Opus 160k + EBU R128 normalization
+melodine get "Track" -f flac --no-sponsorblock  # FLAC container, keep all segments
+
+melodine watchlist add "https://www.youtube.com/playlist?list=…" --name "Daily Mix"
+melodine sync                                   # pull only the new tracks → M3U8
+
+melodine lyrics ~/Music                         # backfill synced .lrc for a whole folder
+melodine doctor                                 # ffmpeg / yt-dlp / DB / network diagnostics
+melodine export -f m3u8 --scope library         # export library or history
 ```
 
-**3. Установи FFmpeg:**
+Short alias: `mld get "…"` works everywhere.
 
-<details>
-<summary><b>Windows</b></summary>
+### TUI hotkeys & screens
 
-```bash
-winget install FFmpeg
-```
-Или скачай с [ffmpeg.org](https://ffmpeg.org/download.html) и добавь в PATH.
+| Key | Action | Screens |
+|---|---|---|
+| `t` | cycle theme (12 themes) | anywhere in the menu |
+| `g` | toggle RU / EN interface | anywhere in the menu |
+| `q` | quit (graceful, saves queue) | anywhere in the menu |
+| `1`–`9`, `0` | search / playlist / queue / history / watchlist / lyrics / doctor / export / settings / exit | menu |
+| `Ctrl+C` | interrupt downloads → cancel remaining & persist queue for resume | queue screen |
 
-</details>
+### Configuration
 
-<details>
-<summary><b>Linux</b></summary>
-
-```bash
-sudo apt install ffmpeg
-```
-
-</details>
-
-<details>
-<summary><b>macOS</b></summary>
-
-```bash
-brew install ffmpeg
-```
-
-</details>
-
-**4. Запусти:**
-
-```bash
-python main.py
-```
-
-### 📝 Формат плейлиста
-
-Создай `.txt` файл со списком треков. Melodine понимает разные форматы:
-
-```
-ХАННА - Потеряла голову
-Perfect Pitch, Rocco, L'EXAIS - APT.
-SEREBRO — Отпусти меня
-```
-
-А также справится с «грязными» файлами:
-
-```
-# Мой плейлист
-1. ХАННА - Потеряла голову
-2) SEREBRO — Отпусти меня
-3 Руки Вверх! - Только для тебя
-
-Всего: 3 трека
-```
-
-### 🎨 Темы
-
-| Тема | Стиль |
-|------|-------|
-| 🧛 Dracula | Фиолетовая, тёмная |
-| 🌑 Dark | Стандартная тёмная |
-| ❄️ Nord | Северная, спокойная |
-| 🌈 Monokai | Как в Sublime Text |
-| 🌊 Ocean | Синие тона |
-| 🔥 Cyberpunk | Неон, яркая |
-| 🍦 Pastel | Мягкие цвета |
-
-### ⚙️ Конфигурация
-
-При первом запуске создаётся `config.yaml`. Все параметры настраиваются через меню:
+`config.yaml` is created on first run and is **backward compatible with v1 config and data** (unknown v1 keys are kept, the v1 SQLite library and history are migrated in place; note that the internal Python API of `melodine.config/database/downloader/search` changed in v2 — the CLI and TUI workflows are the supported interface).
+Every v1 option keeps working; new sections unlock the v2 features:
 
 ```yaml
-theme: dracula
-language: ru
-download:
-  threads: 4
-  pause: 0.5
-  retry_attempts: 3
-  quality: 320
-  smart_search: true
+theme: dracula          # 12 themes: dracula, dark, nord, monokai, ocean,
+language: ru            # cyberpunk, pastel, daybreak, forest, sakura, terminal, gruvbox
+
+audio:
+  codec: mp3            # opus | mp3 | m4a | flac
+  bitrate: 320
+  normalize: false      # EBU R128 two-pass loudnorm
+  target_lufs: -14.0
+  true_peak: -1.5
+  lra: 11
+
+sponsorblock:
+  enabled: true
+  categories: [music_offtopic, sponsor, intro, outro, selfpromo]
+  force_keyframes: true
+
+lyrics:
+  enabled: true
+  synced: true
+  save_lrc: true
+  rate_limit_ms: 350
+
+artwork:
+  embed: true
+  crop: true            # 16:9 → 1:1 smart crop
+  size: 1000
+
+metadata:
+  enrich: true          # iTunes → MusicBrainz
+  providers: [itunes, musicbrainz]
+
+output:
+  folder: ./downloads
+  template: "{artist}/{album}/{track_num} - {title}.{ext}"
+
+search:
+  anti_mv: true         # Anti-MV Studio Scorer
+  results: 10
+  min_score: 50
+  duration_tolerance: 3
 ```
 
-### 🗂 Структура проекта
+### Development
+
+```bash
+git clone https://github.com/KROFN/melodine.git && cd melodine
+pip install -e ".[dev]"
+pytest            # 232 tests, fully offline (socket guard)
+ruff check .      # lint
+```
+
+<details>
+<summary><b>Project layout</b></summary>
 
 ```
 melodine/
-├── main.py              # Точка входа
-├── requirements.txt
-├── config.yaml          # Создаётся при запуске
-├── melodine/
-│   ├── app.py           # Главный цикл, меню
-│   ├── downloader.py    # Движок скачивания
-│   ├── config.py        # Управление конфигом
-│   ├── database.py      # SQLite история
-│   ├── display.py       # Отрисовка UI (Rich)
-│   ├── themes.py        # Цветовые схемы
-│   ├── locales.py       # Локализация RU/EN
-│   ├── search.py        # Поиск на YouTube
-│   ├── tagger.py        # ID3-теги
-│   └── utils.py         # Парсер плейлистов, утилиты
+├── core/       config (pydantic + v1 migration), logging, shutdown, exceptions
+├── db/         SQLite: tracks (dedup), history (v1), watchlist, queue_state
+├── services/   scoring, search, titles, dedup, lrclib, tagger, artwork,
+│               metadata, downloader, normalize, playlists, doctor, exporter
+├── i18n/       RU/EN catalog with test-enforced parity
+├── ui/         12 themes + rich widgets (progress, score bars, tables)
+└── cli/        typer CLI + the interactive TUI
+tests/          232 tests (all offline, socket guard + providers mocked)
 ```
+
+</details>
 
 ---
 
-## English
+## Русский
 
-### 🎵 What is it?
+**Melodine v2** скачивает музыку с YouTube так, как этого хочет настоящий меломан:
+**студийное звучание вместо клипов**, вырезанные немузыкальные вставки, **синхронизированный
+караоке-текст**, квадратные обложки высокого разрешения, правильные теги (альбом/год/жанр),
+пресеты кодеков в один клик и опциональная **нормализация громкости EBU R128** — через
+роскошный TUI или быстрый headless-CLI.
 
-**Melodine** is an interactive console music downloader. It downloads tracks from a text playlist, converts to MP3, adds tags — all through a beautiful TUI interface.
+### Шесть киллер-фич
 
-### ✨ Features
+1. **Anti-MV Studio Scorer.** Каждый кандидат в поиске получает скор 0–100: официальные
+   аудио-каналы (`Artist - Topic`), `Official Audio` и совпадения длительности поднимаются
+   наверх, а клипы с сюжетом, лайвы, каверы, `slowed + reverb`, 8D, реакции и Shorts тонут —
+   если вы сами явно не попросили (`--live`, `--remix`, `--cover`, `--instrumental`). TUI
+   показывает полную расшифровку скоринга для каждого кандидата.
+2. **SponsorBlock Studio Cut.** Ровно как в самом yt-dlp: `SponsorBlock` собирает метки
+   сегментов до загрузки (`after_filter`), аудио извлекается, и уже затем
+   `ModifyChapters` вырезает `music_offtopic`, `sponsor`, `intro`, `outro` и `selfpromo`
+   из готового файла — скиты и реклама больше не попадут в вашу медиатеку.
+3. **Синхронизированный караоке-текст (LRCLIB).** Вежливый клиент бесплатного API
+   [lrclib.net](https://lrclib.net): точный поиск, нечёткий фоллбэк, фильтр по длительности,
+   приоритет синхронизированного текста. Текст вшивается в теги (`USLT`/`SYLT` для MP3,
+   `LYRICS`/`SYNCEDLYRICS` для FLAC/Opus, `©lyr` для M4A) **и** сохраняется парным файлом
+   `.lrc` для плееров и караоке.
+4. **Умная обрезка обложек + обогащение метаданных.** Горизонтальные 16:9 превью с чёрными
+   полосами автоматически превращаются в идеальный квадрат 1000×1000. Альбом, год, жанр и
+   номер трека подтягиваются из iTunes Search API (фоллбэк — MusicBrainz), а при недоступности
+   используются очищенные теги источника — никаких `(Official Video)` в библиотеке.
+5. **Нормализация EBU R128 и профили кодеков.** `Opus 160k transparent`, `MP3 320k CBR`,
+   `M4A AAC 256k` или `FLAC` (lossless-контейнер; честная оговорка: источник — уже сжатое аудио YouTube, FLAC сохраняет его бит-в-бит, но вернуть отброшенное не может) одним флагом, плюс опциональный двухпроходный
+   `loudnorm=I=-14:TP=-1.5:LRA=11` — весь плейлист играет на одной громкости.
+6. **Умный дедуп, вотчлист и M3U8.** Уникальный индекс (`source_id` + нечёткое совпадение
+   `артист + название + длительность`) никогда не качает дубликаты. Подпишитесь на плейлист
+   или канал — `melodine sync` докачает только новые треки в папки по шаблону
+   `{artist}/{album}/{track_num} - {title}.{ext}` и обновит локальный `.m3u8`.
 
-| Feature | Description |
-|---------|-------------|
-| 📥 **Playlist download** | Multi-threaded downloading from `.txt` files |
-| 🔍 **Track search** | Search with preview — pick the right one |
-| 🧠 **Smart Search** | Tries different query variations if track not found |
-| 🔄 **Auto-retry** | Automatic retries on connection errors |
-| 🏷️ **ID3 tags** | Automatically sets artist and title |
-| 📊 **Statistics** | Charts, top artists, download history |
-| 🎨 **7 themes** | Dracula, Nord, Monokai, Cyberpunk and more |
-| 🌐 **RU / EN** | Full interface localization |
-| ⏸ **Pause** | Ctrl+C — pause, not lose progress |
-| 📋 **Smart parser** | Handles line numbers, junk lines, various formats |
-
-### 📦 Installation
+### Быстрый старт
 
 ```bash
-git clone https://github.com/KROFN/melodine.git
-cd melodine
-pip install -r requirements.txt
-python main.py
+# Требуются Python 3.10+ и FFmpeg
+# Имя "melodine" на PyPI занято чужим проектом — ставим с GitHub
+# (после публикации в PyPI дистрибутив будет называться krofn-melodine)
+uvx --from git+https://github.com/KROFN/melodine.git melodine
+# или: pipx install git+https://github.com/KROFN/melodine.git
 ```
 
-> ⚠️ **FFmpeg required.** Install: `winget install FFmpeg` (Win) / `sudo apt install ffmpeg` (Linux) / `brew install ffmpeg` (Mac)
-
-### 📝 Playlist format
-
+```bash
+melodine                          # интерактивный TUI
+melodine get "ХАННА - Потеряла голову"
+melodine get playlist.txt         # пакетная загрузка из грязного .txt
+melodine watchlist add "https://www.youtube.com/playlist?list=…" --name "Мой микс"
+melodine sync                     # только новые треки + M3U8
+melodine lyrics ~/Музыка          # докачка синхронизированных текстов
+melodine doctor                   # диагностика окружения
+melodine export -f json           # экспорт библиотеки
 ```
-Artist - Song Title
-Another Artist — Another Song
-```
 
-### ⚙️ Configuration
+Горячие клавиши TUI: `t` — смена темы, `g` — переключение RU/EN, `q` — выход,
+`Ctrl+C` — мягкая остановка загрузок с сохранением очереди.
 
-All settings are configurable through the interactive menu. Config is stored in `config.yaml`.
+### Совместимость
+
+- `config.yaml` v1 загружается без изменений (старые ключи `paths.*`,
+  `download.quality`, `metadata.add_tags` мигрируют автоматически).
+- База данных v1 мигрирует на месте: история `downloads`/`sessions` сохраняется,
+  успешные загрузки попадают в новую дедуплицированную медиатеку.
+- Все 7 тем v1 на месте, плюс 5 новых: daybreak, forest, sakura, terminal, gruvbox.
 
 ---
 
 <div align="center">
 
-### 📄 License
+**Built with** [yt-dlp](https://github.com/yt-dlp/yt-dlp) · [rich](https://github.com/Textualize/rich) ·
+[typer](https://typer.tiangolo.com) · [pydantic](https://docs.pydantic.dev) ·
+[mutagen](https://github.com/quodlibet/mutagen) · [Pillow](https://python-pillow.org) ·
+data from [LRCLIB](https://lrclib.net) · [SponsorBlock](https://sponsor.ajay.app) ·
+[iTunes Search](https://developer.apple.com/library/archive/documentation/AudioVideo/Conceptual/iTuneSearchAPI/) · [MusicBrainz](https://musicbrainz.org)
 
-MIT © KROFN
+### License — MIT © KROFN
 
----
-
-⭐ **Star this repo if you find it useful!** ⭐
+⭐ **Star this repo if you find it useful** ⭐
 
 </div>

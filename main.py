@@ -1,18 +1,26 @@
 #!/usr/bin/env python3
+"""Legacy launcher kept for backward compatibility with Melodine v1.
+
+Prefer the installed entry points instead::
+
+    melodine        # interactive TUI
+    mld get "..."   # headless CLI alias
+"""
+
+from __future__ import annotations
 
 import sys
 
-def main():
+
+def main() -> None:
     try:
-        from melodine.app import MelodineApp
-        app = MelodineApp()
-        app.run()
+        from melodine.cli.main import main as cli_main
+
+        cli_main()
     except KeyboardInterrupt:
-        print("\n👋 До встречи!")
+        print("\nGoodbye! / Do vstrechi!")
         sys.exit(0)
-    except Exception as e:
-        print(f"\n❌ Критическая ошибка: {e}")
-        sys.exit(1)
+
 
 if __name__ == "__main__":
     main()

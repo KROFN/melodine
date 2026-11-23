@@ -18,11 +18,23 @@ env/
 *.swp
 *.swo
 
+# Tooling caches
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
 # Melodine runtime files
 config.yaml
 melodine.db
+melodine.db-*
 failed_tracks.txt
 downloads/
+*.log
+*.log.*
+
+# Local build artifacts (never push)
+download/
 
 # OS
 .DS_Store

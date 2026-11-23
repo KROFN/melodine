@@ -1,33 +1,45 @@
+"""Color themes.
+
+All seven v1 themes are preserved (dracula, dark, nord, monokai, ocean,
+cyberpunk, pastel) and joined by five new premium palettes: daybreak,
+forest, sakura, terminal and gruvbox.
+"""
+
+from __future__ import annotations
+
 from dataclasses import dataclass
 
 
-@dataclass
+@dataclass(frozen=True)
 class Theme:
     name: str
     label: str
-    # Основные
+    # Core roles
     primary: str
     secondary: str
     accent: str
-    # Статусы
+    # Statuses
     success: str
     error: str
     warning: str
     info: str
-    # UI
+    # UI chrome
     border: str
     title: str
     subtitle: str
     muted: str
-    # Прогресс-бар
+    # Progress bar
     bar_complete: str
     bar_remaining: str
+    # Light background hint (affects panel styles)
+    light: bool = False
 
 
 THEMES: dict[str, Theme] = {
+    # -- preserved v1 themes --
     "dracula": Theme(
         name="dracula",
-        label="🧛 Dracula",
+        label="Dracula",
         primary="#bd93f9",
         secondary="#ff79c6",
         accent="#8be9fd",
@@ -44,7 +56,7 @@ THEMES: dict[str, Theme] = {
     ),
     "dark": Theme(
         name="dark",
-        label="🌑 Dark",
+        label="Dark",
         primary="#61afef",
         secondary="#c678dd",
         accent="#56b6c2",
@@ -61,7 +73,7 @@ THEMES: dict[str, Theme] = {
     ),
     "nord": Theme(
         name="nord",
-        label="❄️  Nord",
+        label="Nord",
         primary="#88c0d0",
         secondary="#81a1c1",
         accent="#8fbcbb",
@@ -78,7 +90,7 @@ THEMES: dict[str, Theme] = {
     ),
     "monokai": Theme(
         name="monokai",
-        label="🌈 Monokai",
+        label="Monokai",
         primary="#a6e22e",
         secondary="#f92672",
         accent="#66d9ef",
@@ -95,7 +107,7 @@ THEMES: dict[str, Theme] = {
     ),
     "ocean": Theme(
         name="ocean",
-        label="🌊 Ocean",
+        label="Ocean",
         primary="#6cb6ff",
         secondary="#d2a8ff",
         accent="#3ddbd9",
@@ -112,7 +124,7 @@ THEMES: dict[str, Theme] = {
     ),
     "cyberpunk": Theme(
         name="cyberpunk",
-        label="🔥 Cyberpunk",
+        label="Cyberpunk",
         primary="#ff2a6d",
         secondary="#05d9e8",
         accent="#d1f7ff",
@@ -129,7 +141,7 @@ THEMES: dict[str, Theme] = {
     ),
     "pastel": Theme(
         name="pastel",
-        label="🍦 Pastel",
+        label="Pastel",
         primary="#b4befe",
         secondary="#f5c2e7",
         accent="#94e2d5",
@@ -144,12 +156,107 @@ THEMES: dict[str, Theme] = {
         bar_complete="#b4befe",
         bar_remaining="#313244",
     ),
+    # -- new v2 themes --
+    "daybreak": Theme(
+        name="daybreak",
+        label="Daybreak",
+        primary="#b3541e",
+        secondary="#6d9dc5",
+        accent="#d08c60",
+        success="#3a7d44",
+        error="#c0392b",
+        warning="#caa52b",
+        info="#6d9dc5",
+        border="#d8c3a5",
+        title="#b3541e",
+        subtitle="#6d9dc5",
+        muted="#8d99ae",
+        bar_complete="#b3541e",
+        bar_remaining="#e5e0d5",
+        light=True,
+    ),
+    "forest": Theme(
+        name="forest",
+        label="Forest",
+        primary="#8ec07c",
+        secondary="#fabd2f",
+        accent="#83a598",
+        success="#b8bb26",
+        error="#fb4934",
+        warning="#fe8019",
+        info="#8ec07c",
+        border="#504945",
+        title="#8ec07c",
+        subtitle="#fabd2f",
+        muted="#7c6f64",
+        bar_complete="#8ec07c",
+        bar_remaining="#32302f",
+    ),
+    "sakura": Theme(
+        name="sakura",
+        label="Sakura",
+        primary="#d16ba5",
+        secondary="#9059ff",
+        accent="#f6b1c1",
+        success="#77c593",
+        error="#e4572e",
+        warning="#f7b32b",
+        info="#ba63a8",
+        border="#9d8189",
+        title="#d16ba5",
+        subtitle="#f6b1c1",
+        muted="#9d8189",
+        bar_complete="#d16ba5",
+        bar_remaining="#40323a",
+    ),
+    "terminal": Theme(
+        name="terminal",
+        label="Terminal",
+        primary="#33ff66",
+        secondary="#1fd65f",
+        accent="#2ee06a",
+        success="#33ff66",
+        error="#ff4444",
+        warning="#ffd733",
+        info="#33ff66",
+        border="#1e7a36",
+        title="#33ff66",
+        subtitle="#7dffa0",
+        muted="#1e7a36",
+        bar_complete="#33ff66",
+        bar_remaining="#0c2a14",
+    ),
+    "gruvbox": Theme(
+        name="gruvbox",
+        label="Gruvbox",
+        primary="#fe8019",
+        secondary="#d3869b",
+        accent="#8ec07c",
+        success="#b8bb26",
+        error="#fb4934",
+        warning="#fabd2f",
+        info="#83a598",
+        border="#665c54",
+        title="#fabd2f",
+        subtitle="#d3869b",
+        muted="#928374",
+        bar_complete="#fe8019",
+        bar_remaining="#3c3836",
+    ),
 }
+
+DEFAULT_THEME = "dracula"
 
 
 def get_theme(name: str) -> Theme:
-    return THEMES.get(name, THEMES["dracula"])
+    """Return a theme by name with graceful fallback to the default."""
+    return THEMES.get((name or "").strip().lower(), THEMES[DEFAULT_THEME])
 
 
 def list_themes() -> list[tuple[str, str]]:
+    """Return ``(key, label)`` pairs in stable registration order."""
     return [(key, theme.label) for key, theme in THEMES.items()]
+
+
+def is_valid_theme(name: str) -> bool:
+    return (name or "").strip().lower() in THEMES
