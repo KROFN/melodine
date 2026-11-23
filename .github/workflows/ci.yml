@@ -1,0 +1,78 @@
+# CI pipeline for Melodine.
+#
+# Runs on every push to main/master and on every pull request:
+#   - ruff lint (E/W/F/I/UP/B/C4/SIM/RUF)
+#   - full pytest suite on Linux + Windows for Python 3.10 - 3.13
+#
+# The test suite is fully offline by design: conftest.py installs a socket
+# guard that fails any test attempting a real network connection (set
+# MELODINE_TEST_ALLOW_NETWORK=1 to opt out for local live-smoke runs).
+
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  pull_request:
+    branches:
+      - main
+      - master
+
+jobs:
+  lint:
+    name: Lint (ruff)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install package with dev extras
+        run: pip install -e ".[dev]"
+
+      - name: Ruff
+        run: ruff check .
+
+  test:
+    name: Tests (py${{ matrix.python-version }} / ${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - windows-latest
+        python-version:
+          - "3.10"
+          - "3.11"
+          - "3.12"
+          - "3.13"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+
+      - name: Install package with dev extras
+        run: pip install -e ".[dev]"
+
+      - name: Install ffmpeg (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+
+      - name: Install ffmpeg (Windows)
+        if: runner.os == 'Windows'
+        run: choco install ffmpeg --no-progress
+
+      - name: Pytest (fully offline, network blocked by fixture)
+        run: pytest -v
