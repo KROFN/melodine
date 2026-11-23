@@ -54,9 +54,10 @@ square high-res covers, correct album/year/genre tags, one-click codec presets a
    story-driven music videos, lives, covers, `slowed + reverb`, 8D, reactions and Shorts sink —
    unless you explicitly ask (`--live`, `--remix`, `--cover`, `--instrumental`). The TUI shows
    the full scoring trail for every candidate.
-2. **SponsorBlock Studio Cut.** `SponsorBlock` + `ModifyChapters` postprocessors run strictly
-   before audio extraction and automatically remove `music_offtopic`, `sponsor`, `intro`,
-   `outro` and `selfpromo` segments, so skits and sponsor reads never reach your library.
+2. **SponsorBlock Studio Cut.** Staged exactly like the upstream yt-dlp CLI: `SponsorBlock`
+   collects segment timestamps before the download (`after_filter`), the audio is extracted,
+   then `ModifyChapters` cuts `music_offtopic`, `sponsor`, `intro`, `outro` and `selfpromo`
+   from the extracted file — so skits and sponsor reads never reach your library.
 3. **Synced Karaoke Lyrics (LRCLIB).** Polite client for the free [lrclib.net](https://lrclib.net)
    API: exact lookup, fuzzy fallback, duration filtering, synced preferred over plain. Lyrics are
    embedded as `USLT`/`SYLT` (MP3), `LYRICS`/`SYNCEDLYRICS` (FLAC/Opus) or `©lyr` (M4A) **and**
@@ -66,7 +67,9 @@ square high-res covers, correct album/year/genre tags, one-click codec presets a
    number come from the iTunes Search API with a MusicBrainz fallback, falling back to
    cleaned source tags (no more `(Official Video)` in your library).
 5. **EBU R128 Normalization & Codec Profiles.** `Opus 160k transparent`, `MP3 320k CBR`,
-   `M4A AAC 256k` or `FLAC lossless` in one flag, plus optional two-pass
+   `M4A AAC 256k` or `FLAC` (lossless container — honest caveat: the source is YouTube's
+   audio, which is already lossy; FLAC keeps it bit-exact from there, it cannot restore
+   what YouTube threw away) in one flag, plus optional two-pass
    `loudnorm=I=-14:TP=-1.5:LRA=11` so the whole playlist plays at one loudness.
 6. **Smart Dedup, Watchlist & M3U8.** A unique index (`source_id` + fuzzy
    `normalized artist + title + duration`) never downloads a track twice. Subscribe to a
@@ -102,15 +105,21 @@ square high-res covers, correct album/year/genre tags, one-click codec presets a
 **Requirements:** Python 3.10+ and FFmpeg (`winget install FFmpeg` / `sudo apt install ffmpeg` / `brew install ffmpeg`).
 
 ```bash
-# uvx (recommended)
-uvx melodine
+# from GitHub (the PyPI name "melodine" belongs to an unrelated project;
+# once published, the distribution will be "krofn-melodine")
+uvx --from git+https://github.com/KROFN/melodine.git melodine
 
 # pipx
-pipx install melodine
+pipx install git+https://github.com/KROFN/melodine.git
 
 # pip
-pip install melodine
+pip install git+https://github.com/KROFN/melodine.git
 ```
+
+> **Note:** do **not** `pip install melodine` — that name on PyPI is a
+> different project by another author. Melodine's import package and the
+> `melodine` / `mld` commands stay the same; only the distribution name
+> differs (`krofn-melodine` when it is published).
 
 Run `melodine` with no arguments for the interactive TUI, or use the headless CLI:
 
@@ -120,7 +129,7 @@ melodine get "https://youtu.be/…"               # direct URL
 melodine get my_playlist.txt                    # batch: dirty .txt playlists still welcome
 melodine get "Muse - Hysteria" --live           # intent: prefer live versions
 melodine get "Track" -f opus --normalize        # Opus 160k + EBU R128 normalization
-melodine get "Track" -f flac --no-sponsorblock  # lossless, keep all segments
+melodine get "Track" -f flac --no-sponsorblock  # FLAC container, keep all segments
 
 melodine watchlist add "https://www.youtube.com/playlist?list=…" --name "Daily Mix"
 melodine sync                                   # pull only the new tracks → M3U8
@@ -144,7 +153,7 @@ Short alias: `mld get "…"` works everywhere.
 
 ### Configuration
 
-`config.yaml` is created on first run and is **fully backward compatible with v1**.
+`config.yaml` is created on first run and is **backward compatible with v1 config and data** (unknown v1 keys are kept, the v1 SQLite library and history are migrated in place; note that the internal Python API of `melodine.config/database/downloader/search` changed in v2 — the CLI and TUI workflows are the supported interface).
 Every v1 option keeps working; new sections unlock the v2 features:
 
 ```yaml
@@ -195,7 +204,7 @@ search:
 ```bash
 git clone https://github.com/KROFN/melodine.git && cd melodine
 pip install -e ".[dev]"
-pytest            # 201 tests
+pytest            # 232 tests, fully offline (socket guard)
 ruff check .      # lint
 ```
 
@@ -211,7 +220,7 @@ melodine/
 ├── i18n/       RU/EN catalog with test-enforced parity
 ├── ui/         12 themes + rich widgets (progress, score bars, tables)
 └── cli/        typer CLI + the interactive TUI
-tests/          201 tests (all offline, providers mocked)
+tests/          232 tests (all offline, socket guard + providers mocked)
 ```
 
 </details>
@@ -233,9 +242,10 @@ tests/          201 tests (all offline, providers mocked)
    наверх, а клипы с сюжетом, лайвы, каверы, `slowed + reverb`, 8D, реакции и Shorts тонут —
    если вы сами явно не попросили (`--live`, `--remix`, `--cover`, `--instrumental`). TUI
    показывает полную расшифровку скоринга для каждого кандидата.
-2. **SponsorBlock Studio Cut.** Постпроцессоры `SponsorBlock` + `ModifyChapters` работают
-   строго до извлечения аудио и автоматически вырезают `music_offtopic`, `sponsor`, `intro`,
-   `outro` и `selfpromo` — скиты и реклама больше не попадут в вашу медиатеку.
+2. **SponsorBlock Studio Cut.** Ровно как в самом yt-dlp: `SponsorBlock` собирает метки
+   сегментов до загрузки (`after_filter`), аудио извлекается, и уже затем
+   `ModifyChapters` вырезает `music_offtopic`, `sponsor`, `intro`, `outro` и `selfpromo`
+   из готового файла — скиты и реклама больше не попадут в вашу медиатеку.
 3. **Синхронизированный караоке-текст (LRCLIB).** Вежливый клиент бесплатного API
    [lrclib.net](https://lrclib.net): точный поиск, нечёткий фоллбэк, фильтр по длительности,
    приоритет синхронизированного текста. Текст вшивается в теги (`USLT`/`SYLT` для MP3,
@@ -246,7 +256,7 @@ tests/          201 tests (all offline, providers mocked)
    номер трека подтягиваются из iTunes Search API (фоллбэк — MusicBrainz), а при недоступности
    используются очищенные теги источника — никаких `(Official Video)` в библиотеке.
 5. **Нормализация EBU R128 и профили кодеков.** `Opus 160k transparent`, `MP3 320k CBR`,
-   `M4A AAC 256k` или `FLAC lossless` одним флагом, плюс опциональный двухпроходный
+   `M4A AAC 256k` или `FLAC` (lossless-контейнер; честная оговорка: источник — уже сжатое аудио YouTube, FLAC сохраняет его бит-в-бит, но вернуть отброшенное не может) одним флагом, плюс опциональный двухпроходный
    `loudnorm=I=-14:TP=-1.5:LRA=11` — весь плейлист играет на одной громкости.
 6. **Умный дедуп, вотчлист и M3U8.** Уникальный индекс (`source_id` + нечёткое совпадение
    `артист + название + длительность`) никогда не качает дубликаты. Подпишитесь на плейлист
@@ -257,7 +267,10 @@ tests/          201 tests (all offline, providers mocked)
 
 ```bash
 # Требуются Python 3.10+ и FFmpeg
-uvx melodine            # или: pipx install melodine / pip install melodine
+# Имя "melodine" на PyPI занято чужим проектом — ставим с GitHub
+# (после публикации в PyPI дистрибутив будет называться krofn-melodine)
+uvx --from git+https://github.com/KROFN/melodine.git melodine
+# или: pipx install git+https://github.com/KROFN/melodine.git
 ```
 
 ```bash

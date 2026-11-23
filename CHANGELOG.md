@@ -4,6 +4,67 @@ All notable changes to Melodine are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and the project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.0.1] - Review patch: correctness & release hardening
+
+Targeted fixes from the external PR review — no new features, only
+correctness, honesty and release readiness.
+
+### Fixed
+
+- **Distribution name**: PyPI's `melodine` belongs to an unrelated project,
+  so the distribution is renamed to `krofn-melodine` (import package and
+  the `melodine`/`mld` commands are unchanged). README now installs from
+  GitHub and warns against `pip install melodine`.
+- **SponsorBlock pipeline staged like upstream yt-dlp**: `SponsorBlock` now
+  collects segments at `after_filter` (before the download), and
+  `ModifyChapters` runs *after* `FFmpegExtractAudio` in the default
+  `post_process` phase — it edits `info['filepath']`, so it needs the
+  extracted file. The old `pre_process` staging cut nothing real. Tests
+  that asserted the old (wrong) order were rewritten against the upstream
+  semantics.
+- **Ctrl+C → resume no longer loses queued tasks**: `cancel_and_persist()`
+  persisted only futures with `not future.done()`, but `Future.cancel()`
+  flips queued futures to done instantly — cancelled queued tasks silently
+  vanished. Persistence now keys on task results (`success`/`skipped` are
+  done, everything else — running, cancelled, failed — is saved). The TUI
+  SIGINT handler no longer kills the pool before asking the user; declining
+  the stop prompt resets the interrupt flag and keeps downloading. New
+  `melodine get --resume` continues a persisted queue.
+- **CLI flags now apply to `.txt` batch runs**: `-f/--bitrate/--normalize/
+  --no-sponsorblock/--folder/...` were silently dropped for playlists.
+- **A missing `.txt` fails fast offline** instead of being treated as a
+  search query that would hit YouTube.
+- **Scorer: intent no longer short-circuits penalties**: `--live` on
+  "LIVE COVER REACTION" used to collect the live bonus while skipping the
+  cover/reaction penalties. Each penalty is now waived only by its own
+  matching intent.
+- **Dedup is variant-aware**: "Song" vs "Song (Live/Remix/Cover)" are
+  different recordings and are never merged; remaster/radio-edit/version
+  keep the studio identity.
+- **LRCLIB**: a synced fuzzy match (within duration tolerance) now beats a
+  plain-only exact hit; the 350 ms rate limit is enforced with a lock so it
+  holds globally across DownloadPool worker threads.
+- **v1 `download.retry_delay`** is honored again via yt-dlp
+  `retry_sleep_functions`.
+
+### Added
+
+- Real CI at `.github/workflows/ci.yml` (ruff + pytest matrix, Linux and
+  Windows, Python 3.10–3.13; the previous file sat at
+  `.github/ci.workflow.example.yml` and never ran).
+- Offline guarantee is now enforced, not promised: `tests/conftest.py`
+  installs a socket guard that fails any test attempting a real network
+  connection (`MELODINE_TEST_ALLOW_NETWORK=1` opts out for live smoke).
+- Regression tests for every fix above (232 total, all offline).
+
+### Changed
+
+- Honest FLAC wording: a lossless container for already-lossy YouTube
+  audio; it cannot restore what the source threw away.
+- Honest compatibility statement: v1 *config and data* migrate in place;
+  the v1 internal Python API (`melodine.config/database/downloader/search`)
+  is gone — CLI/TUI are the supported interface.
+
 ## [2.0.0] - Flagship Overhaul / Флагманский релиз
 
 ### Added - six killer features / Шесть киллер-фич
@@ -15,8 +76,8 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
   `--instrumental`) overrides the penalties. Every decision is explained in
   the UI with a per-candidate scoring trail.
 - **SponsorBlock Studio Cut** - native yt-dlp `SponsorBlock` + `ModifyChapters`
-  postprocessors (strictly before `FFmpegExtractAudio`) automatically remove
-  non-music segments: `music_offtopic`, `sponsor`, `intro`, `outro`,
+  postprocessors (staged like the upstream CLI; see the 2.0.1 fix below)
+  automatically remove non-music segments: `music_offtopic`, `sponsor`, `intro`, `outro`,
   `selfpromo`. Configurable categories and keyframe precision.
 - **Synced Karaoke Lyrics Engine (LRCLIB)** - polite client for the free
   lrclib.net API (proper `User-Agent`, 350 ms rate limit), exact `/api/get`
@@ -57,7 +118,7 @@ and the project adheres to [Semantic Versioning](https://semver.org/).
   database integrity, broken file paths, network reachability).
 - `melodine export` to M3U8 / JSON for the library or the download history.
 - CI: ruff + pytest matrix on Linux/Windows for Python 3.10-3.13.
-- 201 automated tests covering scoring, title parsing, LRCLIB client,
+- Automated tests covering scoring, title parsing, LRCLIB client,
   artwork cropping, SQLite migrations, locale parity and CLI commands.
 
 ### Changed
