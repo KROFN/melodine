@@ -1,8 +1,18 @@
-"""Shared fixtures for the Melodine test suite."""
+"""Shared fixtures for the Melodine test suite.
+
+The suite is fully offline by design. A session-scoped socket guard makes
+any accidental real network connection fail the test immediately instead
+of hanging on a firewall - this is what makes "no network" a *verified*
+property rather than a hopeful claim. Set ``MELODINE_TEST_ALLOW_NETWORK=1``
+to disable the guard for local live-smoke runs.
+"""
 
 from __future__ import annotations
 
+import atexit
+import os
 import shutil
+import socket
 import sqlite3
 import subprocess
 from pathlib import Path
@@ -12,6 +22,45 @@ import pytest
 from melodine.core.config import AppConfig, save_config
 from melodine.db.database import Database
 from melodine.services.tagger import Tagger
+
+# --------------------------------------------------------------------------- #
+# network guard: the suite must never touch the real network
+# --------------------------------------------------------------------------- #
+
+
+class NetworkBlockedError(RuntimeError):
+    """Raised when a test attempts a real network connection."""
+
+
+def _install_network_guard() -> None:
+    """Replace socket.connect/connect_ex with loud failures.
+
+    Applied at conftest import time - before any test runs - unless
+    MELODINE_TEST_ALLOW_NETWORK=1 is set for manual live-smoke runs.
+    """
+
+    def _deny_connect(*args, **kwargs):  # type: ignore[no-untyped-def]
+        raise NetworkBlockedError(
+            "Real network connection attempted during the offline test "
+            "suite. Tests must mock HTTP clients (see FakeSession); set "
+            "MELODINE_TEST_ALLOW_NETWORK=1 only for manual live-smoke runs."
+        )
+
+    original_connect = socket.socket.connect
+    original_connect_ex = socket.socket.connect_ex
+    socket.socket.connect = _deny_connect  # type: ignore[method-assign]
+    socket.socket.connect_ex = _deny_connect  # type: ignore[method-assign]
+    atexit.register(_restore_network_guard, original_connect, original_connect_ex)
+
+
+def _restore_network_guard(original_connect, original_connect_ex) -> None:  # type: ignore[no-untyped-def]
+    socket.socket.connect = original_connect  # type: ignore[method-assign]
+    socket.socket.connect_ex = original_connect_ex  # type: ignore[method-assign]
+
+
+if os.environ.get("MELODINE_TEST_ALLOW_NETWORK") != "1":
+    _install_network_guard()
+
 
 # A minimal valid MPEG-1 Layer III frame (128 kbps, 44.1 kHz, silent).
 _MP3_FRAME = b"\xff\xfb\x90\x00" + b"\x00" * 413
