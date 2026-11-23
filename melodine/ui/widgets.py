@@ -315,8 +315,12 @@ class QueueLive:
         self._live: Live | None = None
 
     def __enter__(self) -> QueueLive:
+        # `self` is the renderable: Live re-renders it on every refresh
+        # tick, and __rich_console__ builds a fresh status panel each time
+        # (a bound method like `self._panel` is NOT renderable by rich and
+        # used to crash the headless batch path with NotRenderableError).
         self._live = Live(
-            Group(self._panel, self.progress),
+            self,
             console=console,
             refresh_per_second=6,
         )
@@ -326,6 +330,9 @@ class QueueLive:
     def __exit__(self, *_exc: object) -> None:
         if self._live is not None:
             self._live.stop()
+
+    def __rich_console__(self, console, options):
+        yield Group(self._panel(), self.progress)
 
     def _panel(self) -> Panel:
         lines = self.status_provider()
@@ -337,4 +344,4 @@ class QueueLive:
 
     def refresh(self) -> None:
         if self._live is not None:
-            self._live.update(Group(self._panel, self.progress))
+            self._live.refresh()
