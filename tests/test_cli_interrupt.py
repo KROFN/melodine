@@ -14,7 +14,9 @@ import typer
 from typer.testing import CliRunner
 
 from melodine.core.config import AppConfig
+from melodine.db.database import Database
 from melodine.models import DownloadResult, DownloadTask
+from melodine.services.downloader import DownloadService
 
 cli_main = importlib.import_module("melodine.cli.main")
 runner = CliRunner()
@@ -164,3 +166,28 @@ def test_single_track_passes_shutdown_token_and_exits_130(monkeypatch, tmp_path)
     assert captured["shutdown"] is not None
     assert captured["shutdown"].triggered is True
     assert captured["shutdown"].restored is True
+
+
+def test_download_service_honors_pretriggered_shutdown_before_resolve(
+    monkeypatch, tmp_path
+):
+    """Single-track cancellation is observed before network/search work starts."""
+
+    class TriggeredShutdown:
+        triggered = True
+
+    cfg = AppConfig()
+    db = Database(str(tmp_path / "melodine.db"))
+    service = DownloadService(cfg, db, shutdown=TriggeredShutdown())
+
+    def should_not_resolve(task):
+        raise AssertionError("resolve must not run after shutdown was triggered")
+
+    monkeypatch.setattr(service, "resolve", should_not_resolve)
+    try:
+        result = service.process(DownloadTask(query="Artist - Song"))
+    finally:
+        db.close()
+
+    assert result.status == "cancelled"
+    assert result.error == "cancelled"
