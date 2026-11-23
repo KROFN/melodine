@@ -1,6 +1,10 @@
-yt-dlp>=2024.0.0
-rich>=13.0.0
-InquirerPy>=0.3.4
+# Runtime dependencies (kept for git-clone users).
+# The canonical source of truth is pyproject.toml.
+yt-dlp>=2024.12.13
+rich>=13.7.0
+typer>=0.12.5
+pydantic>=2.6.0
+PyYAML>=6.0.1
 mutagen>=1.47.0
-pyyaml>=6.0
-pydantic>=2.0.0
+Pillow>=10.3.0
+requests>=2.32.0

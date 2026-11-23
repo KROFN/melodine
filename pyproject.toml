@@ -1,0 +1,113 @@
+[build-system]
+requires = ["hatchling>=1.24"]
+build-backend = "hatchling.build"
+
+[project]
+name = "melodine"
+version = "2.0.0"
+description = "Flagship YouTube music downloader: studio-audio scoring, SponsorBlock cuts, synced karaoke lyrics, smart artwork and EBU R128 normalization - in a rich TUI and a fast headless CLI."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "KROFN", email = "krofn@users.noreply.github.com" }]
+keywords = [
+    "music",
+    "downloader",
+    "youtube",
+    "yt-dlp",
+    "lyrics",
+    "lrc",
+    "karaoke",
+    "sponsorblock",
+    "tui",
+    "rich",
+    "tagging",
+    "mutagen",
+    "audio",
+]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Environment :: Console",
+    "Intended Audience :: End Users/Desktop",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Multimedia :: Sound/Audio",
+    "Topic :: Multimedia :: Video",
+    "Typing :: Typed",
+]
+dependencies = [
+    "yt-dlp>=2024.12.13",
+    "rich>=13.7.0",
+    "typer>=0.12.5",
+    "pydantic>=2.6.0",
+    "PyYAML>=6.0.1",
+    "mutagen>=1.47.0",
+    "Pillow>=10.3.0",
+    "requests>=2.32.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.2.0",
+    "ruff>=0.6.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/KROFN/melodine"
+Repository = "https://github.com/KROFN/melodine"
+Changelog = "https://github.com/KROFN/melodine/blob/main/CHANGELOG.md"
+"Bug Tracker" = "https://github.com/KROFN/melodine/issues"
+
+[project.scripts]
+melodine = "melodine.cli.main:main"
+mld = "melodine.cli.main:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["melodine"]
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "melodine",
+    "tests",
+    "README.md",
+    "CHANGELOG.md",
+    "LICENSE",
+    "pyproject.toml",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+exclude = [".venv", "venv", "build", "dist", ".git"]
+
+[tool.ruff.lint]
+# RUF001 is disabled project-wide: Melodine deliberately handles Cyrillic
+# text and typographic dashes (EN DASH, EM DASH, HORIZONTAL BAR) in track
+# titles - "ambiguous" unicode characters here are the feature, not a bug.
+ignore = ["RUF001"]
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes
+    "I",   # isort
+    "UP",  # pyupgrade
+    "B",   # flake8-bugbear
+    "C4",  # flake8-comprehensions
+    "SIM", # flake8-simplify
+    "RUF", # ruff-specific
+]
+
+[tool.ruff.lint.per-file-ignores]
+# typer's declarative style requires Optional[...] annotations and
+# typer.Option(...) calls in parameter defaults.
+"melodine/cli/main.py" = ["UP045", "B008"]
+"tests/*" = ["SIM117"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"
