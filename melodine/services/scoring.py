@@ -79,6 +79,9 @@ _P_LONGFORM = re.compile(
     re.IGNORECASE,
 )
 _P_QUALITY = re.compile(r"(\bhd\b|\b4k\b|60\s*fps|2160p|1080p)", re.IGNORECASE)
+# "extended" alone (extended mix / extended version) - the only part of
+# _P_LONGFORM that an explicit --extended intent may waive.
+_EXTENDED_MARKER = re.compile(r"extended", re.IGNORECASE)
 
 _B_OFFICIAL_AUDIO = re.compile(
     r"(official\s+audio|audio\s+only|официальн\w+\s+аудио|аудиоверсия)", re.IGNORECASE
@@ -150,37 +153,58 @@ def score_candidate(
 
     # -- negative signals (video / alternate versions) -------------------------
     if penalize:
-        matched: list[str] = []
+        matched: set[str] = set()
         for pattern, flag in _INTENT_FLAGS_BY_PATTERN:
             if pattern.search(text) and getattr(intent, flag):
-                matched.append(flag)
+                matched.add(flag)
         if getattr(intent, "karaoke", False) and _P_INSTRUMENTAL.search(text):
-            matched.append("karaoke")
+            matched.add("karaoke")
         if getattr(intent, "sped", False) and _P_ALT_MIX.search(text):
-            matched.append("sped")
+            matched.add("sped")
 
         if matched:
             # The user explicitly requested this variant: reward it.
-            _add("score_reason_intent_match", 15, ", ".join(sorted(set(matched))))
-        else:
-            penalties: tuple[tuple[re.Pattern[str], str, int], ...] = (
-                (_P_MUSIC_VIDEO, "score_penalty_music_video", -35),
-                (_P_OFFICIAL_VIDEO, "score_penalty_official_video", -20),
-                (_P_LIVE, "score_penalty_live", -50),
-                (_P_COVER, "score_penalty_cover", -40),
-                (_P_ALT_MIX, "score_penalty_alt_mix", -55),
-                (_P_REMIX, "score_penalty_remix", -35),
-                (_P_INSTRUMENTAL, "score_penalty_instrumental", -30),
-                (_P_REACTION, "score_penalty_reaction", -60),
-                (_P_SHORTS, "score_penalty_shorts", -40),
-                (_P_LONGFORM, "score_penalty_longform", -30),
-                (_P_QUALITY, "score_penalty_quality_markers", -5),
-            )
-            applied: set[str] = set()
-            for pattern, key, points in penalties:
-                if pattern.search(text) and key not in applied:
+            _add("score_reason_intent_match", 15, ", ".join(sorted(matched)))
+
+        # Penalties apply unconditionally - an explicit `--live` only waives
+        # the *live* penalty, it must not silence the cover/reaction/MV
+        # penalties of a candidate like "LIVE COVER REACTION".
+        penalties: tuple[tuple[re.Pattern[str], str, int, frozenset[str]], ...] = (
+            (_P_MUSIC_VIDEO, "score_penalty_music_video", -35, frozenset()),
+            (_P_OFFICIAL_VIDEO, "score_penalty_official_video", -20, frozenset()),
+            (_P_LIVE, "score_penalty_live", -50, frozenset({"live"})),
+            (_P_COVER, "score_penalty_cover", -40, frozenset({"cover"})),
+            (_P_ALT_MIX, "score_penalty_alt_mix", -55, frozenset({"slowed", "sped"})),
+            (_P_REMIX, "score_penalty_remix", -35, frozenset({"remix"})),
+            (
+                _P_INSTRUMENTAL,
+                "score_penalty_instrumental",
+                -30,
+                frozenset({"instrumental", "karaoke"}),
+            ),
+            (_P_REACTION, "score_penalty_reaction", -60, frozenset()),
+            (_P_SHORTS, "score_penalty_shorts", -40, frozenset()),
+            (
+                _P_LONGFORM,
+                "score_penalty_longform",
+                -30,
+                # "extended" only waives the extended-mix part of the pattern,
+                # never the "full album" / "1 hour mix" parts.
+                frozenset({"extended"}) if _EXTENDED_MARKER.search(text) else frozenset(),
+            ),
+            (_P_QUALITY, "score_penalty_quality_markers", -5, frozenset()),
+        )
+        applied: set[str] = set()
+        for pattern, key, points, waivable_by in penalties:
+            if key in applied:
+                continue
+            if pattern.search(text):
+                if waivable_by & matched:
+                    # Requested variant: waive exactly this penalty.
+                    _add(key, 0, "requested")
+                else:
                     _add(key, points)
-                    applied.add(key)
+                applied.add(key)
 
     final = max(0, min(100, score))
     return ScoredCandidate(candidate=candidate, score=final, reasons=reasons)

@@ -91,6 +91,45 @@ class TestIntentOverride:
         scored = score_candidate(candidate("Song (Remix)"), intent=intent)
         assert any(r.key == "score_reason_intent_match" for r in scored.reasons)
 
+    def test_live_intent_waives_only_the_live_penalty(self):
+        """`--live` waives the live penalty itself (0 points, 'requested')..."""
+        intent = IntentFlags(live=True)
+        scored = score_candidate(candidate("Song (Live at Wembley)"), intent=intent)
+        live_reason = next(
+            r for r in scored.reasons if r.key == "score_penalty_live"
+        )
+        assert live_reason.points == 0
+        assert live_reason.value == "requested"
+
+    def test_live_intent_does_not_waive_cover_reaction_penalties(self):
+        """...but it must not silence unrelated penalties.
+
+        Regression: "LIVE COVER REACTION" under `--live` used to collect the
+        live bonus while hiding inside the `else` branch that skips every
+        penalty when any intent matched.
+        """
+        intent = IntentFlags(live=True)
+        scored = score_candidate(candidate("LIVE COVER REACTION"), intent=intent)
+        assert any(r.key == "score_reason_intent_match" for r in scored.reasons)
+        cover = next(r for r in scored.reasons if r.key == "score_penalty_cover")
+        reaction = next(
+            r for r in scored.reasons if r.key == "score_penalty_reaction"
+        )
+        assert cover.points == -40
+        assert reaction.points == -60
+        # Net effect: the multi-variant clickbait still loses hard.
+        assert scored.score < 30
+
+    def test_remix_intent_does_not_waive_reaction_penalty(self):
+        intent = IntentFlags(remix=True)
+        scored = score_candidate(
+            candidate("Song (Remix) REACTION VIDEO"), intent=intent
+        )
+        reaction = next(
+            r for r in scored.reasons if r.key == "score_penalty_reaction"
+        )
+        assert reaction.points == -60
+
     def test_detect_intent_english(self):
         intent = detect_intent("daft punk around the world live remix")
         assert intent.live and intent.remix
