@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
-import click
 import pytest
 from typer.testing import CliRunner
 
@@ -12,6 +12,13 @@ from melodine.cli.main import app
 from melodine.db.database import Database
 
 runner = CliRunner()
+
+_ANSI_RE = re.compile(r"\x1b\[[0-9;?]*[a-zA-Z]|\x1b")
+
+
+def _strip_ansi(text: str) -> str:
+    """Remove ANSI styling so substring asserts are version/environment-proof."""
+    return _ANSI_RE.sub("", text)
 
 
 def seed_library(db_path: Path) -> None:
@@ -209,12 +216,12 @@ class TestGet:
         assert opts.sponsorblock is False
 
     def test_get_help(self):
-        # Wide COLUMNS forces a single-column layout and unstyle() strips ANSI
-        # codes (some typer/rich versions style the option dashes separately),
-        # keeping the substring assertions independent of the runner environment.
+        # Wide COLUMNS forces a single-column layout and _strip_ansi() removes
+        # ANSI codes (some typer/rich versions style the option dashes
+        # separately), keeping the assertions independent of the environment.
         result = runner.invoke(app, ["get", "--help"], env={"COLUMNS": "200"})
         assert result.exit_code == 0
-        plain = click.unstyle(result.output)
+        plain = _strip_ansi(result.output)
         assert "--sponsorblock" in plain
         assert "--normalize" in plain
 
@@ -276,7 +283,7 @@ class TestHelp:
     def test_all_commands_have_help(self):
         result = runner.invoke(app, ["--help"], env={"COLUMNS": "200"})
         assert result.exit_code == 0
-        plain = click.unstyle(result.output)
+        plain = _strip_ansi(result.output)
         for command in ("get", "sync", "lyrics", "doctor", "export", "watchlist"):
             assert command in plain
 
