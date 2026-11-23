@@ -3,8 +3,12 @@ requires = ["hatchling>=1.24"]
 build-backend = "hatchling.build"
 
 [project]
-name = "melodine"
-version = "2.0.0"
+# Distribution name on PyPI. The name "melodine" is already taken on
+# PyPI by an unrelated project (https://pypi.org/project/melodine/), so the
+# distribution is published as "krofn-melodine". The import package and
+# the console commands stay "melodine" / "mld" - the UX does not change.
+name = "krofn-melodine"
+version = "2.0.1"
 description = "Flagship YouTube music downloader: studio-audio scoring, SponsorBlock cuts, synced karaoke lyrics, smart artwork and EBU R128 normalization - in a rich TUI and a fast headless CLI."
 readme = "README.md"
 requires-python = ">=3.10"
