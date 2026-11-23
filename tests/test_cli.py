@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import click
 import pytest
 from typer.testing import CliRunner
 
@@ -208,10 +209,14 @@ class TestGet:
         assert opts.sponsorblock is False
 
     def test_get_help(self):
-        result = runner.invoke(app, ["get", "--help"])
+        # Wide COLUMNS forces a single-column layout and unstyle() strips ANSI
+        # codes (some typer/rich versions style the option dashes separately),
+        # keeping the substring assertions independent of the runner environment.
+        result = runner.invoke(app, ["get", "--help"], env={"COLUMNS": "200"})
         assert result.exit_code == 0
-        assert "--sponsorblock" in result.output
-        assert "--normalize" in result.output
+        plain = click.unstyle(result.output)
+        assert "--sponsorblock" in plain
+        assert "--normalize" in plain
 
     def test_get_full_pipeline_mocked(self, tmp_path, monkeypatch):
         """End-to-end `get` with yt-dlp, providers and lyrics mocked."""
@@ -269,10 +274,11 @@ class TestGet:
 
 class TestHelp:
     def test_all_commands_have_help(self):
-        result = runner.invoke(app, ["--help"])
+        result = runner.invoke(app, ["--help"], env={"COLUMNS": "200"})
         assert result.exit_code == 0
+        plain = click.unstyle(result.output)
         for command in ("get", "sync", "lyrics", "doctor", "export", "watchlist"):
-            assert command in result.output
+            assert command in plain
 
     @pytest.mark.parametrize(
         "command",
