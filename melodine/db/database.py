@@ -330,6 +330,8 @@ class Database:
         tolerance: int = 3,
     ) -> dict[str, Any] | None:
         """Duplicate detection: exact source_id or fuzzy artist+title+duration."""
+        from melodine.services.dedup import variant_signature
+
         with self._lock:
             if source_id:
                 row = self._conn.execute(
@@ -348,6 +350,10 @@ class Database:
             ).fetchall()
 
         for row in rows:
+            # A live/remix/cover is a different recording than the studio
+            # version even when the normalized names match.
+            if variant_signature(str(row["title"] or "")) != variant_signature(title):
+                continue
             track_duration = row["duration"] or 0
             if track_duration <= 0 or duration <= 0:
                 return dict(row)  # cannot compare - conservative duplicate

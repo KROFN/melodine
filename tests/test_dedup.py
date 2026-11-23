@@ -62,3 +62,83 @@ class TestIsSameTrack:
 
     def test_missing_reference_not_duplicate(self):
         assert not is_same_track("Artist", "Song", "", "", 200, 200)
+
+
+class TestVariantSignature:
+    """Variant keywords are part of track identity (live/remix/cover/...)."""
+
+    def test_studio_has_no_variants(self):
+        from melodine.services.dedup import variant_signature
+
+        assert variant_signature("Song") == frozenset()
+        assert variant_signature("Song (Remastered 2011)") == frozenset()
+
+    def test_live_detected(self):
+        from melodine.services.dedup import variant_signature
+
+        assert variant_signature("Song (Live at Wembley)") == frozenset({"live"})
+        assert variant_signature("Песня (вживую)") == frozenset({"live"})
+
+    def test_remix_and_mashup_detected(self):
+        from melodine.services.dedup import variant_signature
+
+        assert variant_signature("Song (Remix)") == frozenset({"remix"})
+        assert variant_signature("Song (Mashup)") == frozenset({"remix"})
+
+    def test_cover_and_instrumental_detected(self):
+        from melodine.services.dedup import variant_signature
+
+        assert variant_signature("Song (Cover)") == frozenset({"cover"})
+        assert variant_signature("Song (Instrumental)") == frozenset(
+            {"instrumental"}
+        )
+
+    def test_remaster_is_not_a_variant(self):
+        """Remaster/radio/edit/version keep the studio-recording identity."""
+        from melodine.services.dedup import variant_signature
+
+        assert variant_signature("Song (Remastered 2011)") == frozenset()
+        assert variant_signature("Song (Radio Edit)") == frozenset()
+        assert variant_signature("Song (Album Version)") == frozenset()
+
+    def test_multiple_variants_combine(self):
+        from melodine.services.dedup import variant_signature
+
+        assert variant_signature("Song (Live Acoustic)") == frozenset(
+            {"live", "acoustic"}
+        )
+
+
+class TestVariantAwareDedup:
+    """`Song` and `Song (Live)` are different recordings, never duplicates."""
+
+    def test_live_is_not_studio_duplicate(self):
+        assert not is_same_track(
+            "Artist", "Song", "Artist", "Song (Live)", 200, 205
+        )
+
+    def test_live_vs_live_is_duplicate(self):
+        assert is_same_track(
+            "Artist", "Song (Live)", "Artist", "Song (Live at Wembley)", 200, 203
+        )
+
+    def test_remix_is_not_studio_duplicate(self):
+        assert not is_same_track(
+            "Artist", "Song", "Artist", "Song (Remix)", 200, 200
+        )
+
+    def test_cover_is_not_studio_duplicate(self):
+        assert not is_same_track(
+            "Artist", "Song", "Artist", "Song (Cover)", 200, 200
+        )
+
+    def test_remaster_is_studio_duplicate(self):
+        """Same recording, just re-mastered: still a duplicate."""
+        assert is_same_track(
+            "Artist", "Song", "Artist", "Song (Remastered 2011)", 200, 200
+        )
+
+    def test_radio_edit_is_studio_duplicate(self):
+        assert is_same_track(
+            "Artist", "Song", "Artist", "Song (Radio Edit)", 200, 203
+        )

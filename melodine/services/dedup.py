@@ -2,6 +2,8 @@
 
 Tracks are considered duplicates when they share a ``source_id`` or when
 their normalized artist + title match and durations are within tolerance.
+Version variants (live / remix / cover / instrumental / ...) are part of
+the track identity: "Song" and "Song (Live)" are NOT duplicates.
 """
 
 from __future__ import annotations
@@ -90,6 +92,39 @@ def normalize_name(text: str) -> str:
     return " ".join(tokens)
 
 
+# Variant keywords that change the *identity* of a recording. They are
+# deliberately a subset of _NOISE_WORDS: remaster / radio / edit / version
+# keep the same identity (same studio recording), while live/remix/cover
+# are different recordings and must never dedup against each other.
+_VARIANT_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
+    ("live", re.compile(r"\blive\b|вживую|живь[её]м|концерт", re.IGNORECASE)),
+    ("remix", re.compile(r"\bremix\w*|ремикс|\bmashup\b|мэшап|\bbootleg\b", re.IGNORECASE)),
+    ("cover", re.compile(r"\bcovers?\b|кавер|covered\s+by", re.IGNORECASE)),
+    (
+        "instrumental",
+        re.compile(r"instrumental|инструментал|\bминус\w*|караоке|karaoke", re.IGNORECASE),
+    ),
+    ("acoustic", re.compile(r"acoustic|акустик", re.IGNORECASE)),
+    ("slowed", re.compile(r"slowed|слоу|\b8d\b|\b9d\b|nightcore", re.IGNORECASE)),
+    ("sped", re.compile(r"sped\s*up|speed\s*up", re.IGNORECASE)),
+    ("acapella", re.compile(r"a\s*capp?ella|без\s+инструмента", re.IGNORECASE)),
+    ("demo", re.compile(r"\bdemo\b|демо", re.IGNORECASE)),
+)
+
+
+def variant_signature(text: str) -> frozenset[str]:
+    """Extract the variant identity markers from a raw title.
+
+    ``Song`` -> frozenset(), ``Song (Live at Wembley)`` -> frozenset({'live'}),
+    ``Song (Remix)`` -> frozenset({'remix'}). Two tracks can only be
+    duplicates when their signatures are equal.
+    """
+    if not text:
+        return frozenset()
+    found = {name for name, pattern in _VARIANT_PATTERNS if pattern.search(text)}
+    return frozenset(found)
+
+
 def is_same_track(
     artist_a: str,
     title_a: str,
@@ -105,6 +140,10 @@ def is_same_track(
     if normalize_name(artist_a) != normalize_name(artist_b):
         return False
     if normalize_name(title_a) != normalize_name(title_b):
+        return False
+    # A live/remix/cover is a different recording than the studio track:
+    # identical normalized names are not enough, variants must match too.
+    if variant_signature(title_a) != variant_signature(title_b):
         return False
     if duration_a <= 0 or duration_b <= 0:
         return True  # unknown durations: be conservative
