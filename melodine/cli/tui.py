@@ -117,10 +117,12 @@ class MelodineTUI:
         console.print(f"[{self.theme.subtitle}]{t('goodbye')}[/]")
 
     def _on_shutdown(self) -> None:
-        # Persist queue state when SIGTERM arrives outside the queue screen.
-        if self.pool is not None and not self.pool.is_done():
-            with contextlib.suppress(Exception):
-                self.pool.cancel_and_persist()
+        # Deliberately does NOT touch the download pool: the queue screen
+        # asks the user first ("stop downloads?") and only cancels on
+        # confirmation, and the exit path persists via _cleanup(). Cancelling
+        # here would make the interactive prompt pointless - the pool would
+        # already be dead before the user answered.
+        return
 
     # ------------------------------------------------------------------ #
     # dashboard & menu
@@ -290,22 +292,23 @@ class MelodineTUI:
                 f"[{theme.muted}]{t('queue_return_hint')}[/]",
             ]
 
-        try:
-            with QueueLive(progress, theme, status_lines):
-                while not pool.is_done():
-                    if self.shutdown.triggered:
-                        raise KeyboardInterrupt
-                    time.sleep(0.25)
-        except KeyboardInterrupt:
-            console.print(f"\n[{theme.warning}]{t('queue_stopping')}[/]")
-            if Confirm.ask(t("queue_stop_prompt"), default=False):
-                saved = pool.cancel_and_persist()
-                if saved:
-                    console.print(f"[{theme.muted}]{t('queue_saved_state', n=saved)}[/]")
-            else:
+        while not pool.is_done():
+            try:
                 with QueueLive(progress, theme, status_lines):
                     while not pool.is_done():
+                        if self.shutdown.triggered:
+                            raise KeyboardInterrupt
                         time.sleep(0.25)
+            except KeyboardInterrupt:
+                console.print(f"\n[{theme.warning}]{t('queue_stopping')}[/]")
+                if Confirm.ask(t("queue_stop_prompt"), default=False):
+                    saved = pool.cancel_and_persist()
+                    if saved:
+                        console.print(f"[{theme.muted}]{t('queue_saved_state', n=saved)}[/]")
+                    break
+                # The user wants to keep downloading: clear the interrupt
+                # flag so the app continues normally instead of exiting.
+                self.shutdown.reset()
 
         if not self.shutdown.triggered:
             self.db.clear_queue()

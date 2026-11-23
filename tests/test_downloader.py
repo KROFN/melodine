@@ -25,13 +25,29 @@ class TestBuildYdlOpts:
                 setattr(getattr(cfg, section), key, value)
         return DownloadService(cfg, _NullDB())
 
-    def test_postprocessor_order_sponsorblock_first(self):
+    def test_postprocessor_staging_matches_upstream(self):
+        """Mirror yt_dlp/__init__.py get_postprocessors semantics.
+
+        Upstream stages SponsorBlock at 'after_filter' (it only queries the
+        SponsorBlock API and stores chapter info before the download), then
+        FFmpegExtractAudio extracts the audio, and ModifyChapters cuts the
+        sponsor segments from the already extracted file afterwards
+        (ModifyChaptersPP.run() reads info['filepath'] - it needs an
+        existing file, so it can never run pre-download).
+        """
         service = self._service()
         opts = service._build_ydl_opts(Path("/tmp/x/01 - T.mp3"),
                                        get_codec_profile("mp3"), 320)
-        keys = [pp["key"] for pp in opts["postprocessors"]]
-        assert keys.index("SponsorBlock") < keys.index("ModifyChapters")
-        assert keys.index("ModifyChapters") < keys.index("FFmpegExtractAudio")
+        pps = opts["postprocessors"]
+        keys = [pp["key"] for pp in pps]
+        # SponsorBlock collects segments before the download even starts.
+        assert keys[0] == "SponsorBlock"
+        assert pps[0]["when"] == "after_filter"
+        # Extraction runs before ModifyChapters cuts the file.
+        assert keys.index("FFmpegExtractAudio") < keys.index("ModifyChapters")
+        # ModifyChapters is a regular post_process (no 'when' override).
+        modify = next(pp for pp in pps if pp["key"] == "ModifyChapters")
+        assert "when" not in modify
 
     def test_sponsorblock_disabled_removes_both(self):
         service = self._service(sponsorblock={"enabled": False})
@@ -52,7 +68,15 @@ class TestBuildYdlOpts:
             pp for pp in opts["postprocessors"] if pp["key"] == "ModifyChapters"
         )
         assert modify["remove_sponsor_segments"] == ["sponsor", "music_offtopic"]
-        assert modify["when"] == "pre_process"
+        # No 'when' override: ModifyChapters runs in the default
+        # 'post_process' phase, after FFmpegExtractAudio (upstream order).
+        assert "when" not in modify
+        # Categories are also forwarded to the SponsorBlock marker itself.
+        marker = next(
+            pp for pp in opts["postprocessors"] if pp["key"] == "SponsorBlock"
+        )
+        assert marker["categories"] == ["sponsor", "music_offtopic"]
+        assert marker["when"] == "after_filter"
 
     def test_codec_profiles_map_correctly(self):
         for codec, yt_codec, ext in (
@@ -65,8 +89,12 @@ class TestBuildYdlOpts:
             profile = get_codec_profile(codec)
             opts = service._build_ydl_opts(Path(f"/tmp/x/t.{ext}"), profile,
                                            profile.default_bitrate)
-            extract = opts["postprocessors"][-1]
-            assert extract["key"] == "FFmpegExtractAudio"
+            # Extract by key: ModifyChapters comes after FFmpegExtractAudio
+            # when SponsorBlock is enabled, so [-1] is not the extractor.
+            extract = next(
+                pp for pp in opts["postprocessors"]
+                if pp["key"] == "FFmpegExtractAudio"
+            )
             assert extract["preferredcodec"] == yt_codec
 
     def test_outtmpl_uses_ext_placeholder(self):
@@ -83,6 +111,21 @@ class TestBuildYdlOpts:
         assert opts["logger"] is not None
         assert opts["quiet"] is True
         assert opts["noprogress"] is True
+
+    def test_retry_delay_maps_to_sleep_functions(self):
+        """v1 `download.retry_delay` must actually reach yt-dlp retries."""
+        service = self._service(download={"retry_delay": 7.5})
+        opts = service._build_ydl_opts(Path("/tmp/x/t.mp3"),
+                                       get_codec_profile("mp3"), 320)
+        sleeps = opts["retry_sleep_functions"]
+        for kind in ("http", "fragment", "extractor", "file_access"):
+            assert sleeps[kind](3) == 7.5
+
+    def test_retry_delay_zero_omits_sleep_functions(self):
+        service = self._service(download={"retry_delay": 0})
+        opts = service._build_ydl_opts(Path("/tmp/x/t.mp3"),
+                                       get_codec_profile("mp3"), 320)
+        assert "retry_sleep_functions" not in opts
 
 
 class TestBuildOutputPath:
@@ -226,3 +269,101 @@ class _NullDB:
             return None
 
         return _noop
+
+
+class TestQueuePersistence:
+    """Regression: Ctrl+C must persist *every* unfinished task.
+
+    The old cancel_and_persist() persisted only futures with
+    ``not future.done()`` - but Future.cancel() flips queued futures to
+    done() instantly, so cancelled queued tasks vanished from the saved
+    queue and were silently lost on resume.
+    """
+
+    def _pool(self, tmp_path, monkeypatch, process_fn):  # type: ignore[no-untyped-def]
+        from melodine.core.shutdown import GracefulShutdown
+        from melodine.db.database import Database
+        from melodine.services.downloader import DownloadPool
+
+        db_path = tmp_path / "melodine.db"
+        db = Database(str(db_path))
+        cfg = AppConfig()
+        cfg.download.threads = 1
+        cfg.download.pause = 0
+        shutdown = GracefulShutdown()
+        pool = DownloadPool(cfg, db, shutdown=shutdown)
+        monkeypatch.setattr(DownloadService, "process", process_fn)
+        return pool, db, shutdown
+
+    def test_cancelled_queued_tasks_are_persisted(self, tmp_path, monkeypatch):
+        import threading
+        import time as _time
+
+        from melodine.models import DownloadResult
+
+        pool = db = shutdown = None
+        started = threading.Event()
+
+        def fake_process(self, task, report=None):  # type: ignore[no-untyped-def]
+            started.set()
+            while not self.shutdown.triggered:  # simulate in-flight download
+                _time.sleep(0.01)
+            return DownloadResult(task=task, status="failed", error="interrupted")
+
+        pool, db, shutdown = self._pool(tmp_path, monkeypatch, fake_process)
+        try:
+            pool.submit(DownloadTask(task_id="t1", query="one"))
+            assert started.wait(timeout=5)  # t1 is now in-flight
+            pool.submit(DownloadTask(task_id="t2", query="two"))  # queued
+            pool.submit(DownloadTask(task_id="t3", query="three"))  # queued
+            _time.sleep(0.1)
+
+            shutdown.trigger()  # SIGINT flag first, like the real handler
+            saved = pool.cancel_and_persist()
+
+            # All three tasks are unfinished -> all three must be saved,
+            # including the two whose futures were cancelled while queued.
+            assert saved == 3
+            persisted = [t.query for t in db.load_queue()]
+            assert persisted == ["one", "two", "three"]
+        finally:
+            db.close()
+
+    def test_completed_tasks_are_not_persisted(self, tmp_path, monkeypatch):
+
+        from melodine.models import DownloadResult
+
+        def fake_process(self, task, report=None):  # type: ignore[no-untyped-def]
+            return DownloadResult(task=task, status="success")
+
+        pool, db, shutdown = self._pool(tmp_path, monkeypatch, fake_process)
+        try:
+            pool.submit(DownloadTask(task_id="t1", query="one"))
+            pool.submit(DownloadTask(task_id="t2", query="two"))
+            pool.wait(timeout=5)
+            shutdown.trigger()
+            saved = pool.cancel_and_persist()
+            # Both tasks finished successfully: nothing to persist.
+            assert saved == 0
+            assert db.load_queue() == []
+        finally:
+            db.close()
+
+    def test_failed_tasks_are_persisted_for_retry(self, tmp_path, monkeypatch):
+        from melodine.models import DownloadResult
+
+        def fake_process(self, task, report=None):  # type: ignore[no-untyped-def]
+            return DownloadResult(task=task, status="failed", error="boom")
+
+        pool, db, shutdown = self._pool(tmp_path, monkeypatch, fake_process)
+        try:
+            pool.submit(DownloadTask(task_id="t1", query="one"))
+            pool.wait(timeout=5)
+            shutdown.trigger()
+            saved = pool.cancel_and_persist()
+            # Failed tasks get another chance on resume (dedup protects
+            # the successes).
+            assert saved == 1
+            assert [t.query for t in db.load_queue()] == ["one"]
+        finally:
+            db.close()

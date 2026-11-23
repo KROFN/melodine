@@ -6,8 +6,12 @@ Stages (per task):
 2. Inspect  - full yt-dlp metadata extraction + duration guard
 3. Dedup    - source_id / fuzzy artist+title+duration duplicate check
 4. Enrich   - iTunes -> MusicBrainz metadata with cleaned-source fallback
-5. Download - yt-dlp with SponsorBlock -> ModifyChapters -> FFmpegExtractAudio
-              (strictly in that postprocessor order)
+5. Download - yt-dlp postprocessors staged exactly like the upstream CLI
+              (verified against yt_dlp/__init__.py get_postprocessors):
+              SponsorBlock collects segments at 'after_filter' (before the
+              download), FFmpegExtractAudio extracts the audio, and
+              ModifyChapters cuts the marked segments from the downloaded
+              file ('post_process', after extraction)
 6. Normalize- optional two-pass EBU R128 loudnorm (ffmpeg)
 7. Artwork  - 16:9 -> 1:1 smart crop (Pillow) + embed
 8. Lyrics   - LRCLIB synced/plain lookup + embed (+ optional .lrc file)
@@ -179,15 +183,15 @@ class DownloadService:
 
         sponsorblock_enabled = bool(self._opt("sponsorblock", self.cfg.sponsorblock.enabled))
         if sponsorblock_enabled:
-            # Order is critical: SponsorBlock marks chapters, ModifyChapters
-            # cuts them - both strictly BEFORE FFmpegExtractAudio.
-            postprocessors.append({"key": "SponsorBlock", "when": "pre_process"})
+            # Upstream yt-dlp staging (see get_postprocessors in
+            # yt_dlp/__init__.py): SponsorBlock runs at 'after_filter' - it
+            # only queries the SponsorBlock API and stores chapter info, it
+            # must NOT be delayed until after the download.
             postprocessors.append(
                 {
-                    "key": "ModifyChapters",
-                    "when": "pre_process",
-                    "remove_sponsor_segments": list(self.cfg.sponsorblock.categories),
-                    "force_keyframes": self.cfg.sponsorblock.force_keyframes,
+                    "key": "SponsorBlock",
+                    "categories": list(self.cfg.sponsorblock.categories),
+                    "when": "after_filter",
                 }
             )
 
@@ -199,6 +203,12 @@ class DownloadService:
         else:
             quality = str(bitrate) if bitrate else profile.yt_quality
 
+        # FFmpegExtractAudio and ModifyChapters both run in the default
+        # 'post_process' phase, in list order - exactly like the upstream
+        # CLI, which yields FFmpegExtractAudio first and ModifyChapters
+        # after it ("ModifyChapters must run before FFmpegMetadataPP",
+        # i.e. after extraction). Cutting the already-extracted audio file
+        # is also far cheaper than re-cutting video.
         postprocessors.append(
             {
                 "key": "FFmpegExtractAudio",
@@ -206,6 +216,15 @@ class DownloadService:
                 "preferredquality": quality,
             }
         )
+
+        if sponsorblock_enabled:
+            postprocessors.append(
+                {
+                    "key": "ModifyChapters",
+                    "remove_sponsor_segments": list(self.cfg.sponsorblock.categories),
+                    "force_keyframes": self.cfg.sponsorblock.force_keyframes,
+                }
+            )
 
         opts: dict[str, Any] = {
             "format": "bestaudio/best",
@@ -222,6 +241,16 @@ class DownloadService:
             "logger": YtdlpLogger(logger),
             "windowsfilenames": True,
         }
+        if self.cfg.download.retry_delay > 0:
+            # v1 `download.retry_delay`: pause between yt-dlp retry
+            # attempts (HTTP / fragment / extractor classes).
+            delay = self.cfg.download.retry_delay
+            opts["retry_sleep_functions"] = {
+                "http": lambda _attempt: delay,
+                "fragment": lambda _attempt: delay,
+                "extractor": lambda _attempt: delay,
+                "file_access": lambda _attempt: delay,
+            }
         self._apply_cookies(opts)
         if progress_hook:
             opts["progress_hooks"] = [progress_hook]
@@ -712,7 +741,17 @@ class DownloadPool:
     # -- graceful shutdown -------------------------------------------------- #
 
     def cancel_and_persist(self) -> int:
-        """Interrupt running tasks and persist the unfinished ones."""
+        """Interrupt running tasks and persist the unfinished ones.
+
+        A task counts as unfinished unless it produced a ``success`` or
+        ``skipped`` result. That deliberately includes tasks whose futures
+        were cancelled while still queued (``Future.cancel()`` makes them
+        ``done()`` immediately, so ``future.done()`` alone would silently
+        drop them from the persisted queue) and tasks that were running
+        when the interrupt arrived. Failed tasks are persisted too, so a
+        resume gives transient errors another chance (dedup keeps already
+        completed tracks from re-downloading).
+        """
         for future, _task in self._jobs:
             future.cancel()
         # Give in-flight tasks a moment to observe the shutdown flag.
@@ -720,15 +759,17 @@ class DownloadPool:
         while time.monotonic() < deadline and not self.is_done():
             time.sleep(0.1)
 
+        with self._lock:
+            results = list(self.results)
         finished_ok = {
             result.task.task_id
-            for result in self.results
+            for result in results
             if result.status in {"success", "skipped"}
         }
         pending = [
             task
-            for future, task in self._jobs
-            if not future.done() and task.task_id not in finished_ok
+            for _future, task in self._jobs
+            if task.task_id not in finished_ok
         ]
         saved = self.db.save_queue(pending)
         self.shutdown_pool()

@@ -31,6 +31,14 @@ class GracefulShutdown:
     def triggered(self) -> bool:
         return self._event.is_set()
 
+    def reset(self) -> None:
+        """Clear the shutdown flag (e.g. the user declined stopping).
+
+        Lets the application keep running normally after an interrupt was
+        observed and handled interactively.
+        """
+        self._event.clear()
+
     def trigger(self) -> None:
         """Programmatically trigger shutdown (used by tests and UI buttons)."""
         self._handle(signal.SIGINT, None)
