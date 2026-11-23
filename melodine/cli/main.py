@@ -35,6 +35,11 @@ from melodine.services.lrclib import LRCLIBClient, write_lrc_file
 from melodine.services.playlists import WatchlistService
 from melodine.services.scoring import detect_intent
 from melodine.services.tagger import Tagger, is_audio_file
+from melodine.services.titles import (
+    clean_artist,
+    clean_track_title,
+    parse_artist_title,
+)
 from melodine.ui.themes import get_theme
 from melodine.ui.widgets import (
     ProgressBridge,
@@ -191,7 +196,9 @@ def _run_batch(
 @app.command()
 def get(
     ctx: typer.Context,
-    query: str = typer.Argument(..., help="Track query or YouTube URL (.txt file also works)."),
+    query: Optional[str] = typer.Argument(
+        None, help="Track query or YouTube URL (.txt file also works)."
+    ),
     fmt: Optional[str] = typer.Option(None, "--format", "-f", help="opus | mp3 | m4a | flac."),
     bitrate: Optional[int] = typer.Option(None, "--bitrate", help="Target bitrate in kbps."),
     normalize: Optional[bool] = typer.Option(
@@ -212,18 +219,54 @@ def get(
     remix: bool = typer.Option(False, "--remix", help="Prefer remixes."),
     cover: bool = typer.Option(False, "--cover", help="Prefer covers."),
     instrumental: bool = typer.Option(False, "--instrumental", help="Prefer instrumentals."),
+    resume: bool = typer.Option(
+        False, "--resume", help="Resume the queue persisted by an interrupted run."
+    ),
 ) -> None:
     """Download a track (or a whole .txt playlist) with the full v2 pipeline."""
     cfg = _get_cfg(ctx)
     theme = get_theme(cfg.theme)
     db = Database(cfg.database.path)
 
+    options = _options_from_flags(
+        fmt, bitrate, normalize, sponsorblock, lyrics, enrich, index, folder
+    )
+    flags_intent = _intent_from_flags(live, remix, cover, instrumental)
+
+    # -- resume mode: continue a queue saved by Ctrl+C --
+    if resume:
+        pending = db.load_queue()
+        if not pending:
+            typer.secho(t("cli_nothing_to_resume"), fg=typer.colors.YELLOW)
+            db.close()
+            raise typer.Exit(code=0)
+        console.print(
+            f"[{theme.primary}]{t('cli_resume_title')}[/]: {len(pending)}"
+        )
+        results = _run_batch(cfg, db, pending, options=options)
+        render_download_results(results, theme)
+        failed = sum(1 for r in results if r.status == "failed")
+        db.close()
+        raise typer.Exit(code=1 if failed else 0)
+
+    if query is None:
+        typer.secho(t("cli_missing_query"), fg=typer.colors.RED)
+        db.close()
+        raise typer.Exit(code=1)
+
     # -- playlist batch mode (v1 soul) --
     maybe_file = Path(query)
-    if maybe_file.exists() and maybe_file.suffix.lower() == ".txt":
+    if maybe_file.suffix.lower() == ".txt":
+        if not maybe_file.is_file():
+            # A missing .txt must fail fast instead of being treated as a
+            # (very odd) search query that would hit the network.
+            typer.secho(t("pl_file_not_found"), fg=typer.colors.RED)
+            db.close()
+            raise typer.Exit(code=1)
         tracks = parse_playlist(maybe_file)
         if not tracks:
             typer.secho(t("pl_no_tracks"), fg=typer.colors.RED)
+            db.close()
             raise typer.Exit(code=1)
         console.print(
             f"[{theme.primary}]{t('cli_batch_title')}[/]: "
@@ -231,27 +274,41 @@ def get(
         )
         tasks = [
             DownloadTask(
-                query=track["query"],
+                query=str(track["query"]),
                 artist=str(track["artist"]),
                 title=str(track["title"]),
                 source="playlist",
-                intent=detect_intent(str(track["query"])),
+                # Explicit CLI intent flags override per-line detection.
+                intent=flags_intent
+                if flags_intent.any
+                else detect_intent(str(track["query"])),
             )
             for track in tracks
         ]
-        results = _run_batch(cfg, db, tasks)
+        # CLI flags (format / normalize / sponsorblock / folder / ...) apply
+        # to batch runs exactly like they do to single-track runs.
+        results = _run_batch(cfg, db, tasks, options=options)
         render_download_results(results, theme)
         failed = sum(1 for r in results if r.status == "failed")
+        db.close()
         raise typer.Exit(code=1 if failed else 0)
 
     # -- single track mode --
-    options = _options_from_flags(
-        fmt, bitrate, normalize, sponsorblock, lyrics, enrich, index, folder
-    )
+    task_artist, task_title = "", ""
+    if not query.startswith("http"):
+        # "Artist - Title" queries feed the scorer's target artist/title so
+        # relevance (not just studio-likeness) drives candidate selection.
+        raw_artist, raw_title = parse_artist_title(query)
+        if raw_artist:
+            task_artist = clean_artist(raw_artist)
+            task_title = clean_track_title(raw_title).title or raw_title
+
     service = DownloadService(cfg, db, options=options)
     task = DownloadTask(
         query=query,
         url=query if query.startswith("http") else "",
+        artist=task_artist,
+        title=task_title,
         intent=IntentFlags(
             live=live, remix=remix, cover=cover, instrumental=instrumental
         )

@@ -140,6 +140,72 @@ class TestGet:
         monkeypatch.chdir(tmp_path)
         result = runner.invoke(app, ["get", "nonexistent.txt"])
         assert result.exit_code == 1
+        # Must fail fast with an explicit message, never fall through to
+        # treating the .txt name as a search query (which would hit the
+        # network - the offline socket guard makes that a hard failure).
+        assert not isinstance(result.exception, type(None))
+
+    def test_get_missing_txt_message_is_file_not_found(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        result = runner.invoke(app, ["--lang", "en", "get", "nonexistent.txt"])
+        assert result.exit_code == 1
+        assert "not found" in result.output.lower()
+
+    def test_get_without_query_shows_usage_error(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        result = runner.invoke(app, ["--lang", "en", "get"])
+        assert result.exit_code == 1
+        assert "Provide a query" in result.output or "query" in result.output.lower()
+
+    def test_get_resume_empty_queue(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        result = runner.invoke(app, ["--lang", "en", "get", "--resume"])
+        assert result.exit_code == 0
+        assert "Nothing to resume" in result.output
+
+    def test_get_txt_batch_applies_cli_flags(self, tmp_path, monkeypatch):
+        """Regression: `.txt` batch runs used to silently drop every CLI
+        flag (-f/--normalize/--no-sponsorblock/...) and fall back to the
+        config defaults."""
+        from melodine.models import DownloadOptions
+
+        playlist = tmp_path / "list.txt"
+        playlist.write_text("Artist - Song One\nArtist - Song Two\n")
+
+        captured: dict = {}
+
+        def fake_run_batch(cfg, db, tasks, *, options=None):
+            captured["tasks"] = list(tasks)
+            captured["options"] = options
+            return []
+
+        # melodine.cli/__init__ re-exports `main`, shadowing the submodule,
+        # so resolve the real module object from sys.modules.
+        import sys
+
+        cli_main_module = sys.modules["melodine.cli.main"]
+        monkeypatch.setattr(cli_main_module, "_run_batch", fake_run_batch)
+        monkeypatch.chdir(tmp_path)
+
+        result = runner.invoke(
+            app,
+            [
+                "--lang", "en",
+                "get", str(playlist),
+                "-f", "opus",
+                "--normalize",
+                "--no-sponsorblock",
+                "--bitrate", "160",
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        assert len(captured["tasks"]) == 2
+        opts: DownloadOptions = captured["options"]
+        assert opts is not None
+        assert opts.codec == "opus"
+        assert opts.bitrate == 160
+        assert opts.normalize is True
+        assert opts.sponsorblock is False
 
     def test_get_help(self):
         result = runner.invoke(app, ["get", "--help"])
