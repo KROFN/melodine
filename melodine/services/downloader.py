@@ -362,8 +362,18 @@ class DownloadService:
                 with contextlib.suppress(Exception):
                     report(event, task, payload)
 
+        def _check_cancelled() -> None:
+            # GracefulShutdown's first signal is cooperative: it sets an
+            # event instead of throwing into arbitrary library code. Check
+            # that token at every safe pipeline boundary so single-track CLI
+            # runs stop promptly even outside yt-dlp's progress hook.
+            if self.shutdown is not None and self.shutdown.triggered:
+                raise CancelledError()
+
         try:
+            _check_cancelled()
             url, artist_hint, title_hint, candidate = self.resolve(task)
+            _check_cancelled()
             _emit("resolve", url=url)
 
             # -- inspect ---------------------------------------------------
@@ -394,6 +404,7 @@ class DownloadService:
                     "thumbnail": None,
                     "thumbnails": [],
                 }
+            _check_cancelled()
             if not info:
                 raise RuntimeError("yt-dlp returned no metadata")
             video_id = str(
@@ -428,7 +439,9 @@ class DownloadService:
                     self._record_history(task, result)
                     return result
             # -- metadata --------------------------------------------------
+            _check_cancelled()
             artist, title, enriched = self._resolve_meta(info, artist_hint, title_hint)
+            _check_cancelled()
             album = (enriched.album if enriched else "") or UNKNOWN_ALBUM
             result.meta = self._meta_from(
                 artist=artist,
@@ -492,10 +505,12 @@ class DownloadService:
                         "or run from a residential connection."
                     ) from exc
                 raise
+            _check_cancelled()
             final_path = self._find_final_file(info, out_path)
             _emit("post", stage="download")
 
             # -- normalize ---------------------------------------------------
+            _check_cancelled()
             if bool(self._opt("normalize", self.cfg.audio.normalize)):
                 _emit("post", stage="normalize")
                 result.normalized = normalize_file(
@@ -508,8 +523,10 @@ class DownloadService:
                 )
 
             # -- artwork -----------------------------------------------------
+            _check_cancelled()
             _emit("post", stage="artwork")
             artwork_bytes = self._fetch_artwork(info, enriched)
+            _check_cancelled()
             if artwork_bytes and bool(self._opt("artwork", self.cfg.artwork.embed)):
                 if bool(self.cfg.artwork.crop):
                     artwork_bytes = crop_to_square(
@@ -520,6 +537,7 @@ class DownloadService:
             # -- lyrics ------------------------------------------------------
             lyrics_record = None
             if bool(self._opt("lyrics", self.cfg.lyrics.enabled)):
+                _check_cancelled()
                 _emit("post", stage="lyrics")
                 lyrics_record = self.lyrics_client.best_match(
                     artist,
@@ -529,8 +547,10 @@ class DownloadService:
                     tolerance=self.cfg.lyrics.duration_tolerance,
                 )
                 result.lyrics = lyrics_record
+                _check_cancelled()
 
             # -- tags --------------------------------------------------------
+            _check_cancelled()
             _emit("post", stage="tags")
             if bool(self.cfg.tags.enabled):
                 self.tagger.apply(final_path, result.meta, lyrics_record)
