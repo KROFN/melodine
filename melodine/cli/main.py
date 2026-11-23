@@ -171,7 +171,16 @@ def _run_batch(
         for task in tasks:
             pool.submit(task)
         with QueueLive(progress, theme, status_lines):
-            while not pool.is_done():
+            while True:
+                # GracefulShutdown installs a signal handler that sets an
+                # event instead of raising KeyboardInterrupt. Check that
+                # event *before* is_done(): workers may observe the same
+                # signal, finish as cancelled, and make the pool look done
+                # before the main thread gets another iteration.
+                if shutdown.triggered:
+                    raise KeyboardInterrupt
+                if pool.is_done():
+                    break
                 import time as _time
 
                 _time.sleep(0.25)
@@ -181,7 +190,8 @@ def _run_batch(
         if saved:
             console.print(f"[{theme.muted}]{t('queue_saved_state', n=saved)}[/]")
         shutdown.restore()
-        return list(pool.results)
+        db.close()
+        raise typer.Exit(code=130) from None
 
     shutdown.restore()
     db.clear_queue()
@@ -303,7 +313,12 @@ def get(
             task_artist = clean_artist(raw_artist)
             task_title = clean_track_title(raw_title).title or raw_title
 
-    service = DownloadService(cfg, db, options=options)
+    # Install the cooperative signal token *before* constructing the service
+    # and pass it through. Otherwise the first Ctrl+C only flips an event
+    # nobody inside a single-track DownloadService can see.
+    shutdown = GracefulShutdown()
+    shutdown.install()
+    service = DownloadService(cfg, db, shutdown=shutdown, options=options)
     task = DownloadTask(
         query=query,
         url=query if query.startswith("http") else "",
@@ -320,16 +335,23 @@ def get(
 
     progress = build_progress(theme)
     bridge = ProgressBridge(progress, theme)
-    shutdown = GracefulShutdown()
-    shutdown.install()
     try:
         with progress:
             result = service.process(task, report=bridge)
     except KeyboardInterrupt:
         console.print(f"\n[{theme.warning}]{t('error_interrupted')}[/]")
-        shutdown.restore()
+        db.close()
         raise typer.Exit(code=130) from None
-    shutdown.restore()
+    finally:
+        shutdown.restore()
+
+    # The installed signal handler normally does not raise KeyboardInterrupt;
+    # DownloadService observes the shared token and returns "cancelled".
+    # Treat that cooperative path exactly like a conventional Ctrl+C.
+    if shutdown.triggered or result.status == "cancelled":
+        console.print(f"\n[{theme.warning}]{t('error_interrupted')}[/]")
+        db.close()
+        raise typer.Exit(code=130)
 
     if result.status == "skipped" and result.duplicate:
         console.print(f"[{theme.warning}]{t('cli_get_duplicate')}[/]")
