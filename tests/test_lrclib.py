@@ -208,3 +208,137 @@ def PathRead(path: str) -> str:
     from pathlib import Path
 
     return Path(path).read_text(encoding="utf-8")
+
+
+class TestSyncedPreference:
+    """'synced preferred' must be an actual ranking rule, not a slogan."""
+
+    def test_synced_fuzzy_beats_plain_exact(self):
+        """Regression: exact /get hit used to return immediately even when
+        it only had plain lyrics while a synced fuzzy match existed."""
+        session = FakeSession()
+        # 1) exact /get: plain lyrics only
+        session.queue(
+            FakeResponse(
+                payload={
+                    "trackName": "Song",
+                    "artistName": "Artist",
+                    "duration": 200,
+                    "plainLyrics": "plain only",
+                    "syncedLyrics": None,
+                }
+            )
+        )
+        # 2) fuzzy /search: synced lyrics, in tolerance
+        session.queue(
+            FakeResponse(
+                payload=[
+                    {
+                        "trackName": "Song",
+                        "artistName": "Artist",
+                        "duration": 201,
+                        "plainLyrics": "plain",
+                        "syncedLyrics": SYNCED,
+                    }
+                ]
+            )
+        )
+        client = make_client(session)
+        record = client.best_match("Artist", "Song", duration=200, tolerance=3)
+        assert record is not None
+        assert record.has_synced
+        assert len(session.requests) == 2  # exact get + fuzzy search
+
+    def test_plain_exact_returned_when_no_synced_fuzzy(self):
+        session = FakeSession()
+        session.queue(
+            FakeResponse(
+                payload={
+                    "trackName": "Song",
+                    "artistName": "Artist",
+                    "duration": 200,
+                    "plainLyrics": "plain only",
+                    "syncedLyrics": None,
+                }
+            )
+        )
+        session.queue(FakeResponse(payload=[]))  # no fuzzy hits at all
+        client = make_client(session)
+        record = client.best_match("Artist", "Song", duration=200)
+        assert record is not None
+        assert not record.has_synced
+        assert record.plain == "plain only"
+
+    def test_synced_fuzzy_out_of_tolerance_does_not_beat_exact(self):
+        session = FakeSession()
+        session.queue(
+            FakeResponse(
+                payload={
+                    "trackName": "Song",
+                    "artistName": "Artist",
+                    "duration": 200,
+                    "plainLyrics": "plain only",
+                    "syncedLyrics": None,
+                }
+            )
+        )
+        session.queue(
+            FakeResponse(
+                payload=[
+                    {
+                        "trackName": "Song",
+                        "artistName": "Artist",
+                        "duration": 600,  # far outside tolerance: wrong track
+                        "plainLyrics": "plain",
+                        "syncedLyrics": SYNCED,
+                    }
+                ]
+            )
+        )
+        client = make_client(session)
+        record = client.best_match("Artist", "Song", duration=200, tolerance=3)
+        assert record is not None
+        assert record.duration == 200
+        assert not record.has_synced
+
+
+class TestThreadSafety:
+    def test_rate_limit_is_global_across_threads(self):
+        """DownloadPool workers share one client: the 350 ms politeness
+        window must hold between requests from *different* threads."""
+        import threading
+        import time as _time
+
+        timestamps: list[float] = []
+        lock = threading.Lock()
+
+        class TimingSession:
+            def get(self, url, params=None, headers=None, timeout=None):
+                with lock:
+                    timestamps.append(_time.monotonic())
+                return FakeResponse(payload=[])
+
+        rate = 0.08
+        client = LRCLIBClient(
+            rate_limit=rate,
+            session=TimingSession(),  # type: ignore[arg-type]
+            sleeper=_time.sleep,
+            clock=_time.monotonic,
+        )
+
+        threads = [
+            threading.Thread(target=client._get, args=("search", {"q": "x"}))
+            for _ in range(4)
+        ]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join(timeout=10)
+
+        assert len(timestamps) == 4
+        gaps = [
+            b - a for a, b in zip(sorted(timestamps), sorted(timestamps)[1:], strict=False)
+        ]
+        # Every consecutive pair must respect the global rate limit
+        # (small epsilon for clock granularity).
+        assert min(gaps) >= rate - 0.02, gaps

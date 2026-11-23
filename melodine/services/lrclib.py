@@ -1,14 +1,17 @@
 """LRCLIB.net client - synced karaoke lyrics engine.
 
 * Correct User-Agent identifying Melodine
-* 350 ms (configurable) rate-limit pause between requests
+* 350 ms (configurable) rate-limit pause between requests, enforced with a
+  lock so the limit holds globally across worker threads
 * Exact ``/api/get`` lookup first, fuzzy ``/api/search`` fallback with
-  duration filtering and preference for synced lyrics
+  duration filtering and preference for synced lyrics (a synced fuzzy hit
+  beats a plain-only exact hit)
 """
 
 from __future__ import annotations
 
 import re
+import threading
 import time
 from collections.abc import Callable
 from typing import Any
@@ -27,7 +30,12 @@ DEFAULT_RATE_LIMIT = 0.35  # seconds between requests
 
 
 class LRCLIBClient:
-    """Thin, polite client for https://lrclib.net."""
+    """Thin, polite client for https://lrclib.net.
+
+    Thread-safe: ``DownloadPool`` shares one client between worker threads,
+    so both the rate-limit throttle and the HTTP request itself run under
+    the same lock - the polite 350 ms pause is a *global* guarantee.
+    """
 
     def __init__(
         self,
@@ -44,6 +52,7 @@ class LRCLIBClient:
         self._sleeper = sleeper
         self._clock = clock
         self._last_request_at = 0.0
+        self._request_lock = threading.Lock()
 
     # ------------------------------------------------------------------ #
 
@@ -67,25 +76,28 @@ class LRCLIBClient:
 
     def _get(self, endpoint: str, params: dict[str, Any]) -> Any:
         """GET an endpoint returning parsed JSON, or None on any failure."""
-        self._throttle()
-        url = f"{BASE_URL}/{endpoint}"
-        try:
-            response = self.session.get(
-                url,
-                params=params,
-                headers={"User-Agent": __user_agent__},
-                timeout=self.timeout,
-            )
-            if response.status_code == 404:
+        with self._request_lock:
+            self._throttle()
+            url = f"{BASE_URL}/{endpoint}"
+            try:
+                response = self.session.get(
+                    url,
+                    params=params,
+                    headers={"User-Agent": __user_agent__},
+                    timeout=self.timeout,
+                )
+                if response.status_code == 404:
+                    return None
+                response.raise_for_status()
+                return response.json()
+            except requests.RequestException as exc:
+                logger.debug(
+                    "LRCLIB request failed (%s %s): %s", endpoint, params, exc
+                )
                 return None
-            response.raise_for_status()
-            return response.json()
-        except requests.RequestException as exc:
-            logger.debug("LRCLIB request failed (%s %s): %s", endpoint, params, exc)
-            return None
-        except ValueError as exc:
-            logger.debug("LRCLIB returned invalid JSON: %s", exc)
-            return None
+            except ValueError as exc:
+                logger.debug("LRCLIB returned invalid JSON: %s", exc)
+                return None
 
     # ------------------------------------------------------------------ #
 
@@ -142,37 +154,58 @@ class LRCLIBClient:
         duration: float | None = None,
         tolerance: float = 3.0,
     ) -> LyricsRecord | None:
-        """Strategy: exact get -> search with duration + synced preference."""
-        record = self.get(artist, title, album=album, duration=duration)
-        if record is not None and (record.has_synced or record.has_plain):
-            return record
+        """Strategy: exact get -> search with duration + synced preference.
+
+        Ranking of outcomes:
+
+        1. exact ``/api/get`` hit that has *synced* lyrics (gold standard:
+        right artist, right track, karaoke timing)
+        2. fuzzy hit with synced lyrics within the duration tolerance
+        (synced karaoke beats a plain-only exact hit)
+        3. exact hit with plain lyrics only
+        4. best fuzzy hit (duration-aware, synced preferred)
+        """
+        exact = self.get(artist, title, album=album, duration=duration)
+        if exact is not None and exact.has_synced:
+            return exact
 
         records = self.search(artist, title)
-        if not records:
-            return None
+        best_fuzzy: LyricsRecord | None = None
+        if records:
 
-        def _duration_penalty(item: LyricsRecord) -> float:
-            if duration is None or duration <= 0 or item.duration <= 0:
-                return 0.0
-            return abs(item.duration - duration)
+            def _duration_penalty(item: LyricsRecord) -> float:
+                if duration is None or duration <= 0 or item.duration <= 0:
+                    return 0.0
+                return abs(item.duration - duration)
 
-        def _rank_key(item: LyricsRecord) -> tuple[int, int, float]:
-            in_tolerance = 0
-            if (
-                duration
-                and duration > 0
-                and item.duration > 0
-                and abs(item.duration - duration) <= tolerance
-            ):
-                in_tolerance = 1
-            has_lyrics = 1 if (item.has_synced or item.has_plain) else 0
-            return (has_lyrics, in_tolerance, -_duration_penalty(item))
+            def _in_tolerance(item: LyricsRecord) -> bool:
+                return bool(
+                    duration
+                    and duration > 0
+                    and item.duration > 0
+                    and abs(item.duration - duration) <= tolerance
+                )
 
-        ranked = sorted(records, key=_rank_key, reverse=True)
-        best = ranked[0]
-        if not (best.has_synced or best.has_plain):
-            return None
-        return best
+            def _rank_key(item: LyricsRecord) -> tuple[int, int, int, float]:
+                in_tolerance = 1 if _in_tolerance(item) else 0
+                has_lyrics = 1 if (item.has_synced or item.has_plain) else 0
+                has_synced = 1 if item.has_synced else 0
+                return (has_lyrics, in_tolerance, has_synced, -_duration_penalty(item))
+
+            ranked = sorted(records, key=_rank_key, reverse=True)
+            if ranked[0].has_synced or ranked[0].has_plain:
+                best_fuzzy = ranked[0]
+
+        # Synced karaoke beats a plain-only exact hit.
+        if (
+            best_fuzzy is not None
+            and best_fuzzy.has_synced
+            and _in_tolerance(best_fuzzy)
+        ):
+            return best_fuzzy
+        if exact is not None and (exact.has_synced or exact.has_plain):
+            return exact
+        return best_fuzzy
 
 
 # --------------------------------------------------------------------------- #
