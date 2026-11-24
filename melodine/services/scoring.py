@@ -196,7 +196,9 @@ def score_candidate(
 
     # -- positive signals (studio audio) --------------------------------------
     if penalize:
-        if _TOPIC_SUFFIX.search(candidate.channel) and (not requested or channel_match or corroborated_typo):
+        if _TOPIC_SUFFIX.search(candidate.channel) and (
+            not requested or channel_match or corroborated_typo
+        ):
             _add("score_reason_topic", 40)
         if _B_OFFICIAL_AUDIO.search(text):
             _add("score_reason_official_audio", 25)
