@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from io import StringIO
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 from rich.console import Console
@@ -14,6 +15,8 @@ from melodine.cli.tui import MelodineTUI
 from melodine.i18n import get_language, set_language
 from melodine.models import DownloadOptions
 from melodine.services.downloader import DownloadService
+from melodine.ui import shell
+from melodine.ui.themes import get_theme
 
 
 @pytest.fixture
@@ -154,3 +157,37 @@ def test_bitrate_reaches_extractor(cfg, db, override, expected):
         pp for pp in opts["postprocessors"] if pp["key"] == "FFmpegExtractAudio"
     )
     assert extract["preferredquality"] == str(expected)
+
+
+@pytest.mark.parametrize(("legacy", "keyboard", "expected"), [
+    (True, True, False),
+    (False, True, True),
+    (False, False, False),
+])
+def test_workspace_requires_modern_interactive_terminal(monkeypatch, legacy, keyboard, expected):
+    monkeypatch.setattr(shell, "keyboard_available", lambda console: keyboard)
+    terminal = SimpleNamespace(legacy_windows=legacy)
+    assert shell.workspace_available(terminal) is expected
+
+
+def test_legacy_home_routes_to_compact_selector(ui, monkeypatch):
+    app, _ = ui
+    monkeypatch.setattr(tui_module.console, "legacy_windows", True)
+    monkeypatch.setattr(shell, "keyboard_available", lambda console: True)
+    calls = []
+    monkeypatch.setattr(app, "_draw_dashboard", lambda: calls.append("compact"))
+
+    def choose(*args, **kwargs):
+        calls.append("select")
+        return "0"
+
+    monkeypatch.setattr(shell, "select", choose)
+    assert app._main_menu() is False
+    assert calls == ["compact", "select"]
+
+
+def test_legacy_theme_keeps_neutral_readable_text():
+    terminal = SimpleNamespace(legacy_windows=True)
+    theme = shell.display_theme(get_theme("dracula"), terminal)
+    assert theme.primary == "white"
+    assert theme.accent == "cyan"
