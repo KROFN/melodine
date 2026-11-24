@@ -24,7 +24,7 @@ BASE_SCORE = 50
 
 # Artist identity: compare whole normalized names, never substring matches.
 _TOPIC_SUFFIX = re.compile(r"\s*[-–—]\s*topic\s*$", re.IGNORECASE)
-_CREDIT_SPLIT = re.compile(r"\s*(?:[&,/]|\s+(?:feat\.?|ft\.?|featuring|и|x|×)\s+)\s*", re.I)
+_CREDIT_SPLIT = re.compile(r"\s*,\s*|\s+[&/×]\s+|\s+(?:feat\.?|ft\.?|featuring|и|x)\s+", re.I)
 _UPLOAD_SUFFIX = re.compile(r"\s*\(слив\s+(?:трека|клипа)(?:\s*,\s*\d{4})?\)\s*$", re.I)
 _CYRILLIC = dict(zip("абвгдежзийклмнопрстуфхцчшщъыьэюя",
     ("a", "b", "v", "g", "d", "e", "zh", "z", "i", "i", "k", "l", "m", "n",
@@ -42,6 +42,19 @@ def _credits(value: str) -> set[str]:
     names = {_name_key(part) for part in _CREDIT_SPLIT.split(value)}
     names.add(_name_key(value))
     return names - {""}
+
+
+def _one_edit_name(a: str, b: str) -> bool:
+    """Only one insertion/deletion/substitution in long single-token names."""
+    if min(len(a), len(b)) < 8 or " " in a or " " in b:
+        return False
+    if len(a) == len(b):
+        return sum(x != y for x, y in zip(a, b, strict=True)) == 1
+    if len(a) > len(b):
+        a, b = b, a
+    return len(b) == len(a) + 1 and any(
+        b[:i] + b[i + 1:] == a for i in range(len(b))
+    )
 
 
 def _title_phonetic_key(value: str) -> str:
@@ -162,20 +175,28 @@ def score_candidate(
     track_title = _UPLOAD_SUFFIX.sub("", track_title)
     channel_artist = _TOPIC_SUFFIX.sub("", candidate.channel)
     requested = _credits(target_artist)
-    channel_match = bool(requested & _credits(channel_artist))
-    credit_match = bool(requested & _credits(credited_artist))
+    channel_key = _name_key(channel_artist)
+    credits = _credits(credited_artist)
+    channel_match = channel_key in requested
+    credit_match = bool(requested & credits)
     title_match = bool(target_title) and (
         _name_key(track_title) == _name_key(target_title)
         or _cross_script_title_match(track_title, target_title)
     )
-    if channel_match or credit_match:
+    # A typo is only accepted when the channel's whole name also occurs in
+    # the video's artist credits and the requested track title matches.
+    corroborated_typo = title_match and channel_key in credits and any(
+        _one_edit_name(name, channel_key) for name in requested
+    )
+    if channel_match or credit_match or corroborated_typo:
         _add("score_reason_artist_match", 20)
-    if candidate.channel_is_verified is True and channel_match and title_match:
+    if (candidate.channel_is_verified is True and title_match
+            and (channel_match or corroborated_typo)):
         _add("score_reason_verified_artist", 15)
 
     # -- positive signals (studio audio) --------------------------------------
     if penalize:
-        if _TOPIC_SUFFIX.search(candidate.channel) and (not requested or channel_match):
+        if _TOPIC_SUFFIX.search(candidate.channel) and (not requested or channel_match or corroborated_typo):
             _add("score_reason_topic", 40)
         if _B_OFFICIAL_AUDIO.search(text):
             _add("score_reason_official_audio", 25)
