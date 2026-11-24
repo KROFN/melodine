@@ -141,8 +141,11 @@ class SearchService:
 
         if (
             self.cfg.download.smart_search
-            and (not scored or scored[0].score < self.cfg.search.min_score
-                 or not scored[0].reasons)
+            and (
+                not scored
+                or scored[0].score < self.cfg.search.min_score
+                or (self.cfg.search.anti_mv and not scored[0].reasons)
+            )
         ):
             seen = {item.candidate.source_id for item in scored}
             for variant in (f"{query} audio", f"{query} official audio", f"{query} topic"):
