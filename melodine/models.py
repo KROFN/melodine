@@ -84,6 +84,8 @@ class SearchCandidate:
     channel: str = ""
     duration: int = 0
     views: int = 0
+    channel_id: str = ""
+    channel_is_verified: bool | None = None
 
     @classmethod
     def from_ytdlp(cls, entry: dict[str, Any]) -> SearchCandidate:
@@ -94,6 +96,11 @@ class SearchCandidate:
             channel=str(entry.get("channel") or entry.get("uploader") or ""),
             duration=int(entry.get("duration") or 0),
             views=int(entry.get("view_count") or 0),
+            channel_id=str(entry.get("channel_id") or ""),
+            channel_is_verified=(
+                entry["channel_is_verified"]
+                if isinstance(entry.get("channel_is_verified"), bool) else None
+            ),
         )
 
 
