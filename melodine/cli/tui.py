@@ -1022,39 +1022,59 @@ class MelodineTUI:
         self._save()
 
     def _settings_theme(self) -> None:
-        self._screen(t("settings_theme"))
-        shell.heading(console, self.theme, shell.tr("Оформление", "Appearance"),
-                      shell.tr("Выбери палитру интерфейса.", "Choose the interface palette."))
         labels = list_themes()
-        console.print(f"[{self.theme.muted}]{t('theme_current')}[/] {self.theme.label}\n")
-        table = Table.grid(padding=(0, 2), expand=True)
-        columns = 2 if shell.width(console) >= 64 else 1
-        for _ in range(columns):
-            table.add_column(ratio=1)
-        cells = []
-        for i, (key, label) in enumerate(labels, 1):
-            palette = get_theme(key)
-            marker = "▸" if key == self.theme.name else " "
-            row = Text(f"{marker} {i:>2}. {label:<12} ")
-            for color in (palette.primary, palette.secondary, palette.accent,
-                          palette.success, palette.warning, palette.error):
-                row.append("██ ", style=color)
-            cells.append(row)
-        for i in range(0, len(cells), columns):
-            table.add_row(*cells[i:i + columns])
-        console.print(shell.panel(console, self.theme, table,
-                                  shell.tr("Палитры", "Palettes")))
-        if console.legacy_windows:
-            console.print(Text(shell.tr(
-                "Классическая консоль: цвета приблизительные. Windows Terminal — полная палитра.",
-                "Classic console: approximate colors. Windows Terminal shows the full palette.",
-            ), style=self.theme.muted))
         default = self._theme_keys.index(self.theme.name) + 1
-        choice = shell.select(
-            console, self.theme, t("theme_select"),
-            [(str(i), label) for i, (_, label) in enumerate(labels, 1)] + [("0", t("back"))],
-            default=str(default), show_rows=False,
-        )
+        if shell.keyboard_available(console):
+            from melodine.ui.workspace import workspace_select
+
+            items = [(str(i), label) for i, (_, label) in enumerate(labels, 1)]
+            previews = {str(i): get_theme(key) for i, (key, _) in enumerate(labels, 1)}
+            hint = shell.tr(
+                "Предпросмотр интерфейса. Enter сохраняет тему, Esc отменяет.",
+                "Preview the interface. Enter saves the theme, Esc cancels.",
+            )
+            if console.legacy_windows:
+                hint += shell.tr(
+                    " Цвета приближённые: классическая консоль Windows.",
+                    " Approximate colors: classic Windows console.",
+                )
+            choice = workspace_select(
+                console, self.theme, t("settings_theme"), items + [("0", t("back"))],
+                {key: hint for key, _ in items}, [], default=str(default),
+                previews=previews,
+            )
+        else:
+            self._screen(t("settings_theme"))
+            shell.heading(console, self.theme, shell.tr("Оформление", "Appearance"),
+                          shell.tr("Выбери палитру интерфейса.", "Choose the interface palette."))
+            console.print(f"[{self.theme.muted}]{t('theme_current')}[/] {self.theme.label}\n")
+            table = Table.grid(padding=(0, 2), expand=True)
+            columns = 2 if shell.width(console) >= 64 else 1
+            for _ in range(columns):
+                table.add_column(ratio=1)
+            cells = []
+            for i, (key, label) in enumerate(labels, 1):
+                palette = get_theme(key)
+                marker = "▸" if key == self.theme.name else " "
+                row = Text(f"{marker} {i:>2}. {label:<12} ")
+                for color in (palette.primary, palette.secondary, palette.accent,
+                              palette.success, palette.warning, palette.error):
+                    row.append("██ ", style=color)
+                cells.append(row)
+            for i in range(0, len(cells), columns):
+                table.add_row(*cells[i:i + columns])
+            console.print(shell.panel(console, self.theme, table,
+                                      shell.tr("Палитры", "Palettes")))
+            if console.legacy_windows:
+                console.print(Text(shell.tr(
+                    "Классическая консоль: цвета приблизительные. Windows Terminal — полная палитра.",
+                    "Classic console: approximate colors. Windows Terminal shows the full palette.",
+                ), style=self.theme.muted))
+            choice = shell.select(
+                console, self.theme, t("theme_select"),
+                [(str(i), label) for i, (_, label) in enumerate(labels, 1)] + [("0", t("back"))],
+                default=str(default), show_rows=False,
+            )
         if choice != "0":
             self.cfg.theme = labels[int(choice) - 1][0]
             self.theme = shell.display_theme(get_theme(self.cfg.theme), console)
