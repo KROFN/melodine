@@ -229,3 +229,15 @@ class TestBadges:
     def test_badge_video(self):
         scored = score_candidate(candidate("Song Official Music Video"))
         assert scored.badge == "video"
+
+
+def test_cadillac_track_upload_beats_video_without_penalizing_leak_word():
+    audio = candidate("Элджей & MORGENSHTERN - Cadillac (СЛИВ ТРЕКА, 2020)",
+                      channel="MORGENSHTERN", duration=178)
+    video = candidate("MORGENSHTERN & Элджей - Cadillac (СЛИВ КЛИПА, 2020)",
+                      channel="MORGENSHTERN", duration=228)
+    ranked = rank_candidates([video, audio], target_title="кадиллак",
+                             target_artist="morgenstern")
+    assert ranked[0].candidate == audio
+    assert not any(r.points < 0 for r in ranked[0].reasons)
+    assert any(r.key == "score_penalty_music_video" for r in ranked[1].reasons)
