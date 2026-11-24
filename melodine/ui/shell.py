@@ -25,17 +25,18 @@ def display_theme(theme: Theme, console: Console) -> Theme:
     """Readable ANSI roles on legacy Windows; truecolor palettes elsewhere."""
     if not console.legacy_windows:
         return theme
-    primary = {
-        "dracula": "bright_magenta", "dark": "bright_blue", "nord": "bright_cyan",
-        "monokai": "bright_green", "ocean": "bright_blue", "cyberpunk": "bright_magenta",
-        "pastel": "bright_magenta", "daybreak": "bright_yellow", "forest": "bright_green",
-        "sakura": "bright_magenta", "terminal": "bright_green", "gruvbox": "bright_yellow",
-    }.get(theme.name, "bright_cyan")
+    # Keep the terminal's default background and readable foreground.
+    # Saturated ANSI magenta/blue are poor substitutes for pastel RGB colors.
+    accent = {
+        "monokai": "green", "forest": "green", "terminal": "green",
+        "daybreak": "yellow", "gruvbox": "yellow", "sakura": "magenta",
+        "cyberpunk": "magenta",
+    }.get(theme.name, "cyan")
     return replace(
-        theme, primary=primary, title=primary, subtitle="bright_cyan",
-        accent="bright_cyan", muted="white", border="bright_black",
-        success="bright_green", warning="bright_yellow", error="bright_red",
-        info="bright_cyan", bar_complete=primary,
+        theme, primary="white", title="white", subtitle="white",
+        accent=accent, muted="white", border="bright_black",
+        success="green", warning="yellow", error="red",
+        info="cyan", bar_complete=accent,
     )
 
 
@@ -44,14 +45,13 @@ def tr(ru: str, en: str) -> str:
 
 
 def width(console: Console) -> int:
-    return max(1, min(console.width, 104))
+    return max(1, min(console.width, 88))
 
 
 def header(console: Console, theme: Theme, title: str, *, home: bool = False) -> None:
     """Compact brand, location and version, shared by every screen."""
     line = Text()
-    line.append(" MELODINE ", style=f"bold white on {theme.primary}"
-                if not theme.primary.startswith("bright_") else f"bold black on {theme.primary}")
+    line.append("Melodine", style=f"bold {theme.accent}")
     line.append("  /  ", style=theme.muted)
     line.append(title, style="bold")
     line.append(f"   v{__version__}", style=theme.muted)
@@ -108,6 +108,11 @@ def keyboard_available(console: Console) -> bool:
     return True
 
 
+def workspace_available(console: Console) -> bool:
+    """Use the compact selector on legacy consoles instead of a split workspace."""
+    return keyboard_available(console) and not console.legacy_windows
+
+
 def choice_rows(console: Console, theme: Theme, items: list[tuple[str, str]]) -> None:
     for key, label in items:
         if not key:
@@ -141,14 +146,18 @@ def select(
         for key, label in items
     ]
     # A high-contrast native ANSI palette on classic Windows.
-    color = "ansicyan" if console.legacy_windows else theme.accent
+    color = {
+        "cyan": "ansicyan", "green": "ansigreen",
+        "yellow": "ansiyellow", "magenta": "ansimagenta",
+    }.get(theme.accent, "ansicyan") if console.legacy_windows else theme.accent
     prompt = inquirer.select(
-        message=message, choices=choices, default=default, pointer="❯",
+        message=message, choices=choices, default=default,
+        pointer=">" if console.legacy_windows else "❯",
         qmark=" ", amark=" ", instruction=tr("(↑↓ Enter / Esc — назад)", "(↑↓ Enter / Esc back)"),
         style=get_style({"pointer": color, "question": "bold", "questionmark": color,
                          "answer": color, "instruction": "ansigray",
                          "selected": f"{color} bold", "separator": "ansigray"}),
-        max_height="55%", show_cursor=False,
+        max_height=min(18, max(3, console.height - 10)), show_cursor=False,
     )
 
     def bind(shortcut: str, value: str) -> None:
