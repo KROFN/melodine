@@ -190,9 +190,10 @@ class MelodineTUI:
 
     def _main_menu(self) -> bool:
         """One menu iteration; returns False to exit."""
-        if shell.keyboard_available(console):
+        if shell.workspace_available(console):
             from melodine.ui.workspace import workspace_select
 
+            self._clear_screen()
             stats = self.db.get_stats()
             tr = shell.tr
             details = {
@@ -808,9 +809,10 @@ class MelodineTUI:
                 (t("theme_current"), self.theme.label),
                 ("Language / Язык", get_language().upper()),
             ]
-            if shell.keyboard_available(console):
+            if shell.workspace_available(console):
                 from melodine.ui.workspace import workspace_select
 
+                self._clear_screen()
                 tr = shell.tr
                 details = {
                     "1": tr("Кодек, битрейт, громкость и параметры загрузки.",
@@ -1024,9 +1026,10 @@ class MelodineTUI:
     def _settings_theme(self) -> None:
         labels = list_themes()
         default = self._theme_keys.index(self.theme.name) + 1
-        if shell.keyboard_available(console):
+        if shell.workspace_available(console):
             from melodine.ui.workspace import workspace_select
 
+            self._clear_screen()
             items = [(str(i), label) for i, (_, label) in enumerate(labels, 1)]
             previews = {str(i): get_theme(key) for i, (key, _) in enumerate(labels, 1)}
             hint = shell.tr(
