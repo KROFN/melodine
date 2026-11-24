@@ -110,7 +110,10 @@ _strings: dict[str, dict[str, str]] = {
         "search_cancel": "Отменено",
         "search_added_queue": "Добавлено в очередь: {n}",
         # -- score reasons --
-        "score_reason_topic": "официальный аудио-канал (- Topic)",
+        "score_reason_artist_match": "совпадает имя исполнителя",
+        "score_reason_verified_artist": "верифицированный канал совпадающего исполнителя",
+        "score_reason_title_transliterated": "название совпадает по транслитерации",
+        "score_reason_topic": "название канала имеет суффикс - Topic",
         "score_reason_official_audio": "Official Audio в названии",
         "score_reason_audio": "аудио-версия в названии",
         "score_reason_lyrics": "текст песни без видеовставок",
@@ -450,7 +453,10 @@ _strings: dict[str, dict[str, str]] = {
         "search_cancel": "Cancelled",
         "search_added_queue": "Added to queue: {n}",
         # -- score reasons --
-        "score_reason_topic": "official audio channel (- Topic)",
+        "score_reason_artist_match": "artist name matches",
+        "score_reason_verified_artist": "verified channel matching the requested artist",
+        "score_reason_title_transliterated": "title matches across scripts",
+        "score_reason_topic": "channel name has - Topic suffix",
         "score_reason_official_audio": "Official Audio in title",
         "score_reason_audio": "audio version in title",
         "score_reason_lyrics": "lyrics version without video cuts",
