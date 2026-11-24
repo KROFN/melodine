@@ -226,6 +226,7 @@ def test_terminal_notice_dismissal_persists(ui, monkeypatch):
     monkeypatch.setattr(tui_module, "IS_WINDOWS", True)
     monkeypatch.setattr(tui_module.console, "legacy_windows", True)
     monkeypatch.setattr(tui_module.console, "_force_terminal", True)
+    monkeypatch.setitem(tui_module.console._environ, "TERM", "xterm")
     monkeypatch.setattr(shell, "keyboard_available", lambda console: True)
     monkeypatch.setattr(app, "_clear_screen", lambda: None)
     monkeypatch.setattr(shell, "select", lambda *args, **kwargs: "1")
