@@ -10,6 +10,7 @@ from prompt_toolkit.filters import Condition
 from prompt_toolkit.key_binding import KeyBindings
 from prompt_toolkit.layout import ConditionalContainer, HSplit, Layout, VSplit, Window
 from prompt_toolkit.layout.controls import FormattedTextControl
+from prompt_toolkit.layout.dimension import Dimension
 from prompt_toolkit.styles import Style
 from prompt_toolkit.widgets import Frame
 
@@ -74,6 +75,10 @@ def workspace_select(
     if "q" not in valid:
         bind("q", "0")
 
+    def menu_width():
+        cols = get_app().output.get_size().columns
+        return min(44, max(34, cols * 2 // 5)) if cols >= 82 else cols
+
     def menu_text():
         fragments = []
         for i, (key, label) in enumerate(items):
@@ -81,8 +86,9 @@ def workspace_select(
                 fragments.append(("class:group", f"  {label}\n"))
                 continue
             selected = i == current
+            line = f" {'❯' if selected else ' '} {key:>2}  {label}"
             fragments.append(("class:selected" if selected else "class:menu",
-                              f" {'❯' if selected else ' '} {key:>2}  {label}\n"))
+                              line.ljust(max(0, menu_width() - 2)) + "\n"))
         return fragments
 
     def detail_text():
@@ -97,7 +103,8 @@ def workspace_select(
             fragments.extend([("class:muted", f"  {name}\n"),
                               ("class:value", f"  {value}\n\n")])
         if context:
-            fragments.append(("class:muted", f"  {context}\n"))
+            fragments.extend([("class:muted", f"  {tr('ПАПКА МУЗЫКИ', 'MUSIC FOLDER')}\n"),
+                              ("class:value", f"  {context}\n")])
         return fragments
 
     def compact_text():
@@ -112,7 +119,8 @@ def workspace_select(
     wide = Condition(lambda: get_app().output.get_size().columns >= 82)
     tall = Condition(lambda: get_app().output.get_size().rows >= 18)
     # ConditionalContainers avoid duplicate focusable controls on small screens.
-    left = Frame(menu, title=tr("Навигация", "Navigation"))
+    left = Frame(menu, title=tr("Навигация", "Navigation"),
+                 width=lambda: Dimension.exact(menu_width()))
     right = ConditionalContainer(
         Frame(Window(FormattedTextControl(detail_text), wrap_lines=True),
               title=tr("Обзор", "Overview")),
