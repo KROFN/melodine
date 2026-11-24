@@ -14,7 +14,8 @@ from melodine.cli import tui as tui_module
 from melodine.cli.tui import MelodineTUI
 from melodine.core.config import load_config
 from melodine.i18n import get_language, set_language
-from melodine.models import DownloadOptions
+from melodine.models import DownloadOptions, SearchCandidate
+from melodine.services.scoring import score_candidate
 from melodine.services.downloader import DownloadService
 from melodine.ui import shell
 from melodine.ui.themes import get_theme
@@ -237,3 +238,35 @@ def test_terminal_notice_dismissal_persists(ui, monkeypatch):
     before = output.getvalue()
     app._terminal_notice()
     assert output.getvalue() == before
+
+
+@pytest.mark.parametrize("language", ["ru", "en"])
+def test_score_preview_explains_neutral_candidate(ui, language):
+    app, output = ui
+    set_language(language)
+    scored = score_candidate(SearchCandidate(title="Cadillac", channel="Artist"))
+    assert scored.score == 50
+    assert not scored.reasons
+    tui_module.render_score_reasons(scored, app.theme)
+    rendered = output.getvalue()
+    assert "50/100" in rendered
+    assert ("Версия не подтверждена" if language == "ru" else "Version not verified") in rendered
+
+
+def test_tui_search_passes_query_context(ui, monkeypatch):
+    app, _ = ui
+    monkeypatch.setattr(Prompt, "ask", lambda *a, **kw: "Muse - Hysteria live")
+    monkeypatch.setattr(app, "_wait_enter", lambda: None)
+    calls = []
+
+    def best(query, **kwargs):
+        calls.append((query, kwargs))
+        return None, []
+
+    monkeypatch.setattr(app.search, "best", best)
+    app.screen_search()
+    query, kwargs = calls[0]
+    assert query == "Muse - Hysteria live"
+    assert kwargs["target_artist"] == "Muse"
+    assert kwargs["target_title"] == "Hysteria live"
+    assert kwargs["intent"].live
