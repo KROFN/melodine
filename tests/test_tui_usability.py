@@ -15,8 +15,8 @@ from melodine.cli.tui import MelodineTUI
 from melodine.core.config import load_config
 from melodine.i18n import get_language, set_language
 from melodine.models import DownloadOptions, SearchCandidate
-from melodine.services.scoring import score_candidate
 from melodine.services.downloader import DownloadService
+from melodine.services.scoring import score_candidate
 from melodine.ui import shell
 from melodine.ui.themes import get_theme
 
