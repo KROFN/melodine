@@ -42,6 +42,8 @@ flowchart LR
 
 Нужны Python **3.10+** и [FFmpeg](https://ffmpeg.org/download.html) в `PATH`.
 
+**Windows:** рекомендуем [Windows Terminal](https://learn.microsoft.com/ru-ru/windows/terminal/install) для полноценной цветовой палитры и современного отображения. В нём можно использовать CMD или PowerShell. Классическая консоль поддерживается в компактном режиме.
+
 ```bash
 pipx install git+https://github.com/KROFN/melodine.git@v2.0.1
 melodine
