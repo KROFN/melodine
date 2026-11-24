@@ -160,6 +160,6 @@ class SearchService:
                     if extra.candidate.source_id not in seen:
                         seen.add(extra.candidate.source_id)
                         scored.append(extra)
-            scored.sort(key=lambda item: item.score, reverse=True)
+            scored.sort(key=scoring.ranking_key, reverse=True)
 
         return (scored[0] if scored else None), scored
