@@ -15,7 +15,6 @@ from pathlib import Path
 from typing import Any
 
 from rich import box
-from rich.panel import Panel
 from rich.prompt import Confirm, IntPrompt, Prompt
 from rich.table import Table
 from rich.text import Text
@@ -378,7 +377,8 @@ class MelodineTUI:
 
     def screen_search(self) -> None:
         self._screen(t("search_title"))
-        shell.heading(console, self.theme, shell.tr("Найди нужную версию", "Find the right version"),
+        shell.heading(console, self.theme,
+                      shell.tr("Найди нужную версию", "Find the right version"),
                       shell.tr("Исполнитель - Название или прямая ссылка YouTube.",
                                "Artist - Title or a direct YouTube URL."))
         console.print(Text(shell.tr("Пример: Muse - Hysteria", "Example: Muse - Hysteria"),
