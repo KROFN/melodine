@@ -229,7 +229,8 @@ class MelodineTUI:
                 [(tr("Треков в медиатеке", "Library tracks"), str(self.db.count_tracks())),
                  (t("stats_success"), str(stats["success"])),
                  (tr("Формат аудио", "Audio format"), codec),
-                 (tr("Оформление", "Appearance"), self.theme.label + " · " + get_language().upper())],
+                 (tr("Оформление", "Appearance"),
+                  self.theme.label + " · " + get_language().upper())],
                 default=self._home_selection, context=str(
                     Path(self.cfg.output.folder).expanduser().resolve()),
             )
