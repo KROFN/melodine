@@ -370,12 +370,15 @@ class DownloadService:
                 raise CancelledError()
 
         try:
+            _emit("start", title=task.title or task.query or task.url)
+            _emit("post", stage="resolve")
             _check_cancelled()
             url, artist_hint, title_hint, candidate = self.resolve(task)
             _check_cancelled()
             _emit("resolve", url=url)
 
             # -- inspect ---------------------------------------------------
+            _emit("post", stage="inspect")
             inspect_opts: dict[str, Any] = {
                 "quiet": True,
                 "no_warnings": True,
@@ -439,6 +442,7 @@ class DownloadService:
                     return result
             # -- metadata --------------------------------------------------
             _check_cancelled()
+            _emit("post", stage="metadata")
             artist, title, enriched = self._resolve_meta(info, artist_hint, title_hint)
             _check_cancelled()
             album = (enriched.album if enriched else "") or UNKNOWN_ALBUM
@@ -475,6 +479,7 @@ class DownloadService:
 
             # -- download ----------------------------------------------------
             _emit("start", title=title, artist=artist, video_id=video_id)
+            _emit("post", stage="prepare")
 
             def _hook(data: dict[str, Any]) -> None:
                 if self.shutdown is not None and self.shutdown.triggered:
@@ -491,8 +496,19 @@ class DownloadService:
                         speed=data.get("speed"),
                         eta=data.get("eta"),
                     )
+                elif data.get("status") == "finished":
+                    _emit("post", stage="convert")
 
             download_opts = self._build_ydl_opts(out_path, profile, bitrate, _hook)
+            def _post_hook(data: dict[str, Any]) -> None:
+                _check_cancelled()
+                if data.get("status") == "started":
+                    name = str(data.get("postprocessor", ""))
+                    stage = {"SponsorBlock": "sponsorblock",
+                             "ModifyChapters": "cut"}.get(name, "convert")
+                    _emit("post", stage=stage)
+
+            download_opts["postprocessor_hooks"] = [_post_hook]
             try:
                 info = self._extract_info(url, download_opts, download=True)
             except Exception as exc:
@@ -506,7 +522,7 @@ class DownloadService:
                 raise
             _check_cancelled()
             final_path = self._find_final_file(info, out_path)
-            _emit("post", stage="download")
+            _emit("post", stage="convert")
 
             # -- normalize ---------------------------------------------------
             _check_cancelled()
@@ -564,6 +580,7 @@ class DownloadService:
                     logger.warning("could not write .lrc file: %s", exc)
 
             # -- persist -----------------------------------------------------
+            _emit("post", stage="persist")
             result.status = "success"
             result.path = str(final_path)
             try:
