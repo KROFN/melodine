@@ -69,7 +69,7 @@ def build_progress(theme: Theme) -> Progress:
     """A download progress with speed and ETA columns."""
     return Progress(
         SpinnerColumn(style=theme.primary),
-        TextColumn("[bold]{task.description}"),
+        TextColumn("{task.description}", markup=False),
         BarColumn(
             complete_style=theme.bar_complete,
             finished_style=theme.success,
@@ -96,7 +96,9 @@ def score_bar(theme: Theme, score: int, width: int = 10) -> str:
 def render_scored_results(scored: list[ScoredCandidate], theme: Theme, limit: int = 12) -> None:
     """Anti-MV ranked search results table."""
     table = Table(
-        title=f"[{theme.title}]✦ {t('search_title')}[/]",
+        title=Text(t("search_title"), style=f"bold {theme.primary}"),
+        title_justify="left",
+        header_style=f"bold {theme.accent}",
         border_style=theme.border,
         box=box.ROUNDED,
         show_lines=False,
@@ -116,8 +118,8 @@ def render_scored_results(scored: list[ScoredCandidate], theme: Theme, limit: in
         badge_key = f"badge_{item.badge}"
         table.add_row(
             str(i),
-            item.candidate.title[:64],
-            item.candidate.channel[:28],
+            Text(item.candidate.title),
+            Text(item.candidate.channel),
             format_duration(item.candidate.duration),
             score_bar(theme, item.score),
             f"[{badge_color}]{t(badge_key)}[/]",
@@ -161,13 +163,15 @@ def render_download_results(results: list[DownloadResult], theme: Theme) -> None
     if not results:
         return
     table = Table(
-        title=f"[{theme.title}]✦ {t('panel_result')}[/]",
+        title=Text(t("panel_result"), style=f"bold {theme.primary}"),
+        title_justify="left",
+        header_style=f"bold {theme.accent}",
         border_style=theme.border,
         box=box.ROUNDED,
     )
     table.add_column("", width=2)
     table.add_column(t("search_col_title"), style=theme.primary, ratio=3)
-    table.add_column(t("result_artwork"), justify="center", width=3)
+    table.add_column(t("result_artwork"), justify="center", no_wrap=True)
     table.add_column(t("result_lyrics"), justify="center", ratio=1)
     table.add_column("SB", justify="center", width=3)
     table.add_column("R128", justify="center", width=4)
@@ -175,7 +179,7 @@ def render_download_results(results: list[DownloadResult], theme: Theme) -> None
     for result in results:
         label = result.meta.title or result.task.title or result.task.query
         if result.duplicate and result.status == "skipped":
-            label = f"{label} [{theme.muted}]({t('result_duplicate')})[/]"
+            label = f"{label} ({t('result_duplicate')})"
         artwork = (
             f"[{theme.success}]✓[/]" if result.artwork_embedded else f"[{theme.muted}]–[/]"
         )
@@ -193,7 +197,7 @@ def render_download_results(results: list[DownloadResult], theme: Theme) -> None
         )
         table.add_row(
             _status_icon(theme, result.status),
-            label[:60],
+            Text(label),
             artwork,
             lyrics,
             sponsorblock,
@@ -257,6 +261,7 @@ class ProgressBridge:
             with self._lock:
                 if event == "start":
                     label = f"{payload.get('title', task.title or task.query)[:48]}"
+                    self._labels[task.task_id] = label
                     self._tasks[task.task_id] = self.progress.add_task(label, total=100.0)
                 elif event == "progress" and task.task_id in self._tasks:
                     total = float(payload.get("total") or 0)
@@ -294,10 +299,10 @@ class ProgressBridge:
                     else:
                         self.progress.update(task_id, completed=0.0, total=100.0)
                     icon = {
-                        "success": f"[{self.theme.success}]✓",
-                        "skipped": f"[{self.theme.muted}]–",
-                        "failed": f"[{self.theme.error}]✗",
-                        "cancelled": f"[{self.theme.warning}]!",
+                        "success": "✓",
+                        "skipped": "–",
+                        "failed": "✗",
+                        "cancelled": "!",
                     }.get(getattr(result, "status", "failed"), "!")
                     label = self._labels.get(task.task_id, "")
                     self.progress.update(task_id, description=f"{icon} {label}")
@@ -338,7 +343,9 @@ class QueueLive:
         lines = self.status_provider()
         return Panel(
             "\n".join(lines),
-            title=f"[{self.theme.title}]✦ {t('queue_title')}[/]",
+            title=Text(t("queue_title"), style=f"bold {self.theme.primary}"),
+            title_align="left",
+            box=box.ROUNDED,
             border_style=self.theme.border,
         )
 
