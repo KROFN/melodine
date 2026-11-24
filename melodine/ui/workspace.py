@@ -147,8 +147,12 @@ def workspace_select(
     ])
     # prompt_toolkit translates ANSI styles through its Win32 output driver.
     if console.legacy_windows:
-        accent, muted, background, foreground = "ansibrightcyan", "ansiwhite", "ansiblack", "ansiwhite"
-        selected = "bg:ansibrightcyan ansiblack bold"
+        accent = {
+            "bright_magenta": "ansibrightmagenta", "bright_blue": "ansibrightblue",
+            "bright_green": "ansibrightgreen", "bright_yellow": "ansibrightyellow",
+        }.get(theme.primary, "ansibrightcyan")
+        muted, background, foreground = "ansiwhite", "ansiblack", "ansiwhite"
+        selected = f"bg:{accent} ansiblack bold"
     else:
         accent, muted, background, foreground = theme.primary, "#a8aec0", "#14161e", "#e4e6ef"
         selected = f"bg:{accent} #101118 bold"
