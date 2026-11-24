@@ -15,6 +15,7 @@ import shutil
 import socket
 import sqlite3
 import subprocess
+import threading
 from pathlib import Path
 
 import pytest
@@ -39,23 +40,50 @@ def _install_network_guard() -> None:
     MELODINE_TEST_ALLOW_NETWORK=1 is set for manual live-smoke runs.
     """
 
-    def _deny_connect(*args, **kwargs):  # type: ignore[no-untyped-def]
+    original_connect = socket.socket.connect
+    original_connect_ex = socket.socket.connect_ex
+    original_socketpair = socket.socketpair
+    local = threading.local()
+
+    def _socketpair(*args, **kwargs):
+        # Windows emulates socketpair with TCP loopback. Permit only that
+        # synchronous stdlib operation, not arbitrary local HTTP requests.
+        previous = getattr(local, "socketpair", False)
+        local.socketpair = True
+        try:
+            return original_socketpair(*args, **kwargs)
+        finally:
+            local.socketpair = previous
+
+    def _allowed(address):
+        return (getattr(local, "socketpair", False)
+                and isinstance(address, tuple) and address[0] in {"127.0.0.1", "::1"})
+
+    def _deny_connect(sock, address):
+        if _allowed(address):
+            return original_connect(sock, address)
         raise NetworkBlockedError(
             "Real network connection attempted during the offline test "
             "suite. Tests must mock HTTP clients (see FakeSession); set "
             "MELODINE_TEST_ALLOW_NETWORK=1 only for manual live-smoke runs."
         )
 
-    original_connect = socket.socket.connect
-    original_connect_ex = socket.socket.connect_ex
+    def _deny_connect_ex(sock, address):
+        if _allowed(address):
+            return original_connect_ex(sock, address)
+        return _deny_connect(sock, address)
+
     socket.socket.connect = _deny_connect  # type: ignore[method-assign]
-    socket.socket.connect_ex = _deny_connect  # type: ignore[method-assign]
-    atexit.register(_restore_network_guard, original_connect, original_connect_ex)
+    socket.socket.connect_ex = _deny_connect_ex  # type: ignore[method-assign]
+    socket.socketpair = _socketpair
+    atexit.register(_restore_network_guard, original_connect, original_connect_ex,
+                    original_socketpair)
 
 
-def _restore_network_guard(original_connect, original_connect_ex) -> None:  # type: ignore[no-untyped-def]
+def _restore_network_guard(original_connect, original_connect_ex, original_socketpair) -> None:
     socket.socket.connect = original_connect  # type: ignore[method-assign]
     socket.socket.connect_ex = original_connect_ex  # type: ignore[method-assign]
+    socket.socketpair = original_socketpair
 
 
 if os.environ.get("MELODINE_TEST_ALLOW_NETWORK") != "1":

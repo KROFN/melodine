@@ -121,7 +121,12 @@ class DownloadService:
     def effective_profile(self) -> tuple[CodecProfile, int]:
         codec_key = str(self._opt("codec", self.cfg.audio.codec))
         profile = get_codec_profile(codec_key)
-        bitrate = int(self._opt("bitrate", self.cfg.audio.bitrate) or profile.default_bitrate)
+        configured_bitrate = (
+            self.cfg.audio.bitrate
+            if codec_key == self.cfg.audio.codec
+            else profile.default_bitrate
+        )
+        bitrate = int(self._opt("bitrate", configured_bitrate) or profile.default_bitrate)
         if profile.lossless:
             bitrate = 0
         return profile, bitrate
@@ -136,31 +141,19 @@ class DownloadService:
         """Return ``(url, artist_hint, title_hint, candidate)`` for a task."""
         if task.url:
             return task.url, task.artist, task.title, None
-        best, _scored = self.search.best(
+        best, scored = self.search.best(
             task.query,
             intent=task.intent,
             target_title=task.title,
             target_artist=task.artist,
         )
-        if best is None:
-            raise RuntimeError("no search results")
         index = self.options.index
-        if index and index > 1:
-            # Caller picked a specific result: re-run search for the list.
-            _top, scored = self.search.best(
-                task.query,
-                intent=task.intent,
-                target_title=task.title,
-                target_artist=task.artist,
-            )
-            if 0 < index <= len(scored):
-                chosen = scored[index - 1]
-                return (
-                    chosen.candidate.url,
-                    task.artist or chosen.candidate.channel,
-                    task.title or chosen.candidate.title,
-                    chosen.candidate,
-                )
+        if index is not None:
+            if not 0 < index <= len(scored):
+                raise RuntimeError("search result index out of range")
+            best = scored[index - 1]
+        if best is None:
+            raise RuntimeError("no matching search results" if scored else "no search results")
         return (
             best.candidate.url,
             task.artist or best.candidate.channel,
@@ -195,13 +188,7 @@ class DownloadService:
                 }
             )
 
-        quality: str | None
-        if profile.lossless:
-            quality = None
-        elif profile.yt_quality and not self._opt("bitrate", None):
-            quality = profile.yt_quality
-        else:
-            quality = str(bitrate) if bitrate else profile.yt_quality
+        quality = None if profile.lossless else str(bitrate) if bitrate else profile.yt_quality
 
         # FFmpegExtractAudio and ModifyChapters both run in the default
         # 'post_process' phase, in list order - exactly like the upstream
@@ -371,12 +358,15 @@ class DownloadService:
                 raise CancelledError()
 
         try:
+            _emit("start", title=task.title or task.query or task.url)
+            _emit("post", stage="resolve")
             _check_cancelled()
             url, artist_hint, title_hint, candidate = self.resolve(task)
             _check_cancelled()
             _emit("resolve", url=url)
 
             # -- inspect ---------------------------------------------------
+            _emit("post", stage="inspect")
             inspect_opts: dict[str, Any] = {
                 "quiet": True,
                 "no_warnings": True,
@@ -440,6 +430,7 @@ class DownloadService:
                     return result
             # -- metadata --------------------------------------------------
             _check_cancelled()
+            _emit("post", stage="metadata")
             artist, title, enriched = self._resolve_meta(info, artist_hint, title_hint)
             _check_cancelled()
             album = (enriched.album if enriched else "") or UNKNOWN_ALBUM
@@ -476,6 +467,7 @@ class DownloadService:
 
             # -- download ----------------------------------------------------
             _emit("start", title=title, artist=artist, video_id=video_id)
+            _emit("post", stage="prepare")
 
             def _hook(data: dict[str, Any]) -> None:
                 if self.shutdown is not None and self.shutdown.triggered:
@@ -492,8 +484,20 @@ class DownloadService:
                         speed=data.get("speed"),
                         eta=data.get("eta"),
                     )
+                elif data.get("status") == "finished":
+                    _emit("post", stage="convert")
 
             download_opts = self._build_ydl_opts(out_path, profile, bitrate, _hook)
+
+            def _post_hook(data: dict[str, Any]) -> None:
+                _check_cancelled()
+                if data.get("status") == "started":
+                    name = str(data.get("postprocessor", ""))
+                    stage = {"SponsorBlock": "sponsorblock",
+                             "ModifyChapters": "cut"}.get(name, "convert")
+                    _emit("post", stage=stage)
+
+            download_opts["postprocessor_hooks"] = [_post_hook]
             try:
                 info = self._extract_info(url, download_opts, download=True)
             except Exception as exc:
@@ -507,7 +511,6 @@ class DownloadService:
                 raise
             _check_cancelled()
             final_path = self._find_final_file(info, out_path)
-            _emit("post", stage="download")
 
             # -- normalize ---------------------------------------------------
             _check_cancelled()
@@ -565,6 +568,7 @@ class DownloadService:
                     logger.warning("could not write .lrc file: %s", exc)
 
             # -- persist -----------------------------------------------------
+            _emit("post", stage="persist")
             result.status = "success"
             result.path = str(final_path)
             try:

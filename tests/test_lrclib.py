@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import pytest
 
+from melodine import __version__
 from melodine.models import LyricsRecord
 from melodine.services.lrclib import (
     LRCLIBClient,
@@ -71,7 +72,7 @@ class TestGet:
         client = make_client(session)
         client.get("Artist", "Song")
         request = session.requests[0]
-        assert request["headers"]["User-Agent"].startswith("Melodine/2.0")
+        assert request["headers"]["User-Agent"].startswith(f"Melodine/{__version__} (")
 
     def test_rate_limit_pause_between_requests(self):
         session = FakeSession()

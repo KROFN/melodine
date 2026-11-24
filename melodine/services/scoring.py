@@ -9,6 +9,7 @@ explicitly asked for that variant.
 from __future__ import annotations
 
 import re
+import unicodedata
 
 from melodine.models import (
     IntentFlags,
@@ -16,10 +17,61 @@ from melodine.models import (
     ScoreReason,
     SearchCandidate,
 )
-from melodine.services.titles import clean_track_title, token_similarity
+from melodine.services.titles import clean_track_title, parse_artist_title, token_similarity
 
 # Base score every candidate starts from.
 BASE_SCORE = 50
+
+# Artist identity: compare whole normalized names, never substring matches.
+_TOPIC_SUFFIX = re.compile(r"\s*[-–—]\s*topic\s*$", re.IGNORECASE)
+_CREDIT_SPLIT = re.compile(r"\s*,\s*|\s+[&/×]\s+|\s+(?:feat\.?|ft\.?|featuring|и|x)\s+", re.I)
+_UPLOAD_SUFFIX = re.compile(r"\s*\(слив\s+(?:трека|клипа)(?:\s*,\s*\d{4})?\)\s*$", re.I)
+_CYRILLIC = dict(zip("абвгдежзийклмнопрстуфхцчшщъыьэюя",
+    ("a", "b", "v", "g", "d", "e", "zh", "z", "i", "i", "k", "l", "m", "n",
+     "o", "p", "r", "s", "t", "u", "f", "kh", "ts", "ch", "sh", "shch", "",
+     "y", "", "e", "yu", "ya"), strict=True))
+_CYRILLIC["ё"] = "e"
+
+
+def _name_key(value: str) -> str:
+    value = unicodedata.normalize("NFKC", value).casefold()
+    return " ".join(re.findall(r"[^\W_]+", value))
+
+
+def _credits(value: str) -> set[str]:
+    names = {_name_key(part) for part in _CREDIT_SPLIT.split(value)}
+    names.add(_name_key(value))
+    return names - {""}
+
+
+def _one_edit_name(a: str, b: str) -> bool:
+    """Only one insertion/deletion/substitution in long single-token names."""
+    if min(len(a), len(b)) < 8 or " " in a or " " in b:
+        return False
+    if len(a) == len(b):
+        return sum(x != y for x, y in zip(a, b, strict=True)) == 1
+    if len(a) > len(b):
+        a, b = b, a
+    return len(b) == len(a) + 1 and any(
+        b[:i] + b[i + 1:] == a for i in range(len(b))
+    )
+
+
+def _title_phonetic_key(value: str) -> str:
+    # A deliberately narrow cross-script fallback, not an identity check.
+    value = "".join(_CYRILLIC.get(ch, ch) for ch in _name_key(value))
+    value = re.sub(r"c(?=[eiy])", "s", value).replace("c", "k")
+    return re.sub(r"(.)\1+", r"\1", value)
+
+
+def _cross_script_title_match(a: str, b: str) -> bool:
+    a, b = _name_key(a), _name_key(b)
+    if not a or not b or max(len(a), len(b)) < 4:
+        return False
+    if bool(re.search(r"[а-яё]", a)) == bool(re.search(r"[а-яё]", b)):
+        return False
+    return _title_phonetic_key(a) == _title_phonetic_key(b)
+
 
 # --------------------------------------------------------------------------- #
 # Intent detection
@@ -58,7 +110,7 @@ def detect_intent(text: str) -> IntentFlags:
 # --------------------------------------------------------------------------- #
 
 _P_MUSIC_VIDEO = re.compile(
-    r"(official\s+music\s+video|music\s+video|videoclip|официальн\w+\s+клип|\bклип\b"
+    r"(official\s+music\s+video|music\s+video|videoclip|официальн\w+\s+клип|\bклип(?:а|у|ом|е|ы|ов|ам|ами|ах)?\b"
     r"|\bmv\b|m/v)",
     re.IGNORECASE,
 )
@@ -119,19 +171,81 @@ def score_candidate(
         score += points
         reasons.append(ScoreReason(key=key, points=points, value=value))
 
+    credited_artist, raw_title = parse_artist_title(candidate.title)
+    track_title = clean_track_title(raw_title).title
+    # A separator can introduce a version label, rather than artist credits.
+    if credited_artist and not track_title:
+        credited_artist, track_title = "", clean_track_title(candidate.title).title
+    track_title = _UPLOAD_SUFFIX.sub("", track_title)
+    # Recognize a known version suffix when the requested base title is exact.
+    # Keep the original text for the version penalties below.
+    if target_title:
+        for match in re.finditer(r"\s*[\[(]([^\]\)]+)[\])]\s*$", track_title):
+            suffix = match.group(1)
+            base = track_title[:match.start()].strip()
+            if (_name_key(base) == _name_key(target_title)
+                    and any(pattern.search(suffix) for pattern, _ in _INTENT_FLAGS_BY_PATTERN)):
+                track_title = base
+                break
+        if (credited_artist and _name_key(credited_artist) == _name_key(target_title)
+                and any(pattern.search(raw_title) for pattern, _ in _INTENT_FLAGS_BY_PATTERN)):
+            track_title, credited_artist = credited_artist, ""
+    channel_artist = _TOPIC_SUFFIX.sub("", candidate.channel)
+    requested = _credits(target_artist)
+    channel_key = _name_key(channel_artist)
+    # Many legitimate uploads omit the separator ("Artist Track").
+    # Strip an artist prefix only if the remaining whole title matches.
+    if not credited_artist and requested and target_title:
+        whole = _name_key(track_title)
+        target = _name_key(target_title)
+        for name in sorted(requested, key=len, reverse=True):
+            prefix = name + " "
+            if not whole.startswith(prefix):
+                continue
+            remainder = whole[len(prefix):]
+            if remainder == target or _cross_script_title_match(remainder, target):
+                credited_artist, track_title = name, remainder
+                break
+    credits = _credits(credited_artist)
+    channel_match = channel_key in requested
+    credit_match = bool(requested & credits)
+    title_match = bool(target_title) and (
+        _name_key(track_title) == _name_key(target_title)
+        or _cross_script_title_match(track_title, target_title)
+    )
+    similarity = token_similarity(_name_key(track_title), _name_key(target_title))
+    relevant = not target_title or title_match or similarity >= 0.5
+    if not relevant:
+        _add("score_penalty_title_mismatch", -BASE_SCORE)
+    # A typo is only accepted when the channel's whole name also occurs in
+    # the video's artist credits and the requested track title matches.
+    corroborated_typo = title_match and channel_key in credits and any(
+        _one_edit_name(name, channel_key) for name in requested
+    )
+    if relevant and (channel_match or credit_match or corroborated_typo):
+        _add("score_reason_artist_match", 20)
+    if (candidate.channel_is_verified is True and title_match
+            and (channel_match or corroborated_typo)):
+        _add("score_reason_verified_artist", 15)
+
     # -- positive signals (studio audio) --------------------------------------
-    if penalize:
-        if candidate.channel.strip().lower().endswith("- topic"):
+    if penalize and relevant:
+        if _TOPIC_SUFFIX.search(candidate.channel) and (
+            not requested or channel_match or corroborated_typo
+        ):
             _add("score_reason_topic", 40)
         if _B_OFFICIAL_AUDIO.search(text):
-            _add("score_reason_official_audio", 25)
+            if requested and not (channel_match or corroborated_typo):
+                _add("score_reason_audio_claim", 8)
+            else:
+                _add("score_reason_official_audio", 25)
         elif _B_AUDIO.search(text):
             _add("score_reason_audio", 10)
         if _B_LYRICS.search(text) and not _P_MUSIC_VIDEO.search(text):
             _add("score_reason_lyrics", 5)
 
     # -- duration match --------------------------------------------------------
-    if expected_duration and expected_duration > 0 and candidate.duration > 0:
+    if relevant and expected_duration and expected_duration > 0 and candidate.duration > 0:
         delta = abs(candidate.duration - expected_duration)
         if delta <= 2:
             _add("score_reason_duration_exact", 25)
@@ -142,11 +256,12 @@ def score_candidate(
 
     # -- title similarity ------------------------------------------------------
     if target_title:
-        cleaned = clean_track_title(candidate.title).title
-        if cleaned.lower() == target_title.strip().lower():
+        cleaned = track_title
+        if _name_key(cleaned) == _name_key(target_title):
             _add("score_reason_title_exact", 12)
+        elif _cross_script_title_match(cleaned, target_title):
+            _add("score_reason_title_transliterated", 10)
         else:
-            similarity = token_similarity(cleaned, target_title)
             if similarity >= 0.5:
                 _add("score_reason_title_similar", int(15 * similarity),
                      f"{int(similarity * 100)}%")
@@ -162,7 +277,7 @@ def score_candidate(
         if getattr(intent, "sped", False) and _P_ALT_MIX.search(text):
             matched.add("sped")
 
-        if matched:
+        if matched and relevant:
             # The user explicitly requested this variant: reward it.
             _add("score_reason_intent_match", 15, ", ".join(sorted(matched)))
 
@@ -210,6 +325,15 @@ def score_candidate(
     return ScoredCandidate(candidate=candidate, score=final, reasons=reasons)
 
 
+def title_relevant(item: ScoredCandidate) -> bool:
+    """False when a supplied target title has no sufficient matching evidence."""
+    return not any(r.key == "score_penalty_title_mismatch" for r in item.reasons)
+
+
+def ranking_key(item: ScoredCandidate) -> tuple[int, bool, int]:
+    return item.score, title_relevant(item), sum(reason.points for reason in item.reasons)
+
+
 def rank_candidates(
     candidates: list[SearchCandidate],
     **kwargs: object,
@@ -219,5 +343,5 @@ def rank_candidates(
         score_candidate(candidate, **kwargs)  # type: ignore[arg-type]
         for candidate in candidates
     ]
-    scored.sort(key=lambda item: item.score, reverse=True)
+    scored.sort(key=ranking_key, reverse=True)
     return scored

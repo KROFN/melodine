@@ -42,8 +42,12 @@ flowchart LR
 
 Нужны Python **3.10+** и [FFmpeg](https://ffmpeg.org/download.html) в `PATH`.
 
+**Windows:** рекомендуем [Windows Terminal](https://learn.microsoft.com/ru-ru/windows/terminal/install) для полноценной цветовой палитры и современного отображения. В нём можно использовать CMD или PowerShell. Классическая консоль поддерживается в компактном режиме.
+
+**Сеть:** доступность YouTube зависит от региона. При тайм-аутах проверьте подключение на том же устройстве, включая файрвол и настройки уже используемого VPN/прокси. Melodine не управляет сетевыми ограничениями.
+
 ```bash
-pipx install git+https://github.com/KROFN/melodine.git@v2.0.1
+pipx install git+https://github.com/KROFN/melodine.git@v2.1.0
 melodine
 ```
 
@@ -53,9 +57,9 @@ melodine
 <summary><strong>Другие способы установки</strong></summary>
 
 ```bash
-pip install git+https://github.com/KROFN/melodine.git@v2.0.1
+pip install git+https://github.com/KROFN/melodine.git@v2.1.0
 
-uvx --from git+https://github.com/KROFN/melodine.git@v2.0.1 melodine
+uvx --from git+https://github.com/KROFN/melodine.git@v2.1.0 melodine
 ```
 
 </details>

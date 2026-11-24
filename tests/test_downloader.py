@@ -4,9 +4,13 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from melodine.core.config import AppConfig
 from melodine.models import (
+    DownloadOptions,
     DownloadTask,
+    ScoredCandidate,
     SearchCandidate,
     get_codec_profile,
 )
@@ -204,8 +208,6 @@ class TestResolve:
 
         def fake_best(self, query, **kwargs):
             calls.append(query)
-            from melodine.models import ScoredCandidate
-
             candidate = SearchCandidate(
                 source_id="x", url="https://youtu.be/x",
                 title="Song", channel="Artist - Topic", duration=200,
@@ -367,3 +369,57 @@ class TestQueuePersistence:
             assert [t.query for t in db.load_queue()] == ["one"]
         finally:
             db.close()
+
+
+def test_pipeline_reports_transfer_and_postprocessor_stages(cfg, db, monkeypatch, tmp_path):
+    cfg.output.folder = str(tmp_path / "music")
+    cfg.metadata.enrich = False
+    cfg.artwork.embed = False
+    cfg.lyrics.enabled = False
+    cfg.tags.enabled = False
+    service = DownloadService(cfg, db)
+    events = []
+
+    def fake_extract(url, opts, download):
+        info = {"id": "abc", "title": "Song", "channel": "Artist", "duration": 180}
+        if download:
+            opts["postprocessor_hooks"][0]({"status": "started", "postprocessor": "SponsorBlock"})
+            opts["progress_hooks"][0]({"status": "downloading", "downloaded_bytes": 10,
+                                      "total_bytes": 10})
+            opts["progress_hooks"][0]({"status": "finished"})
+            opts["postprocessor_hooks"][0]({"status": "started", "postprocessor": "ModifyChapters"})
+            path = Path(opts["outtmpl"].replace("%(ext)s", "mp3"))
+            path.write_bytes(b"test")
+            info["requested_downloads"] = [{"filepath": str(path)}]
+        return info
+
+    monkeypatch.setattr(service, "_extract_info", fake_extract)
+    result = service.process(
+        DownloadTask(url="https://youtu.be/abc", artist="Artist", title="Song"),
+        report=lambda event, task, payload: events.append((event, payload.get("stage"))),
+    )
+    assert result.status == "success", result.error
+    assert ("post", "sponsorblock") in events
+    assert events.index(("progress", None)) < events.index(("post", "convert"))
+    assert events.index(("post", "cut")) < events.index(("post", "persist"))
+    assert events[-1] == ("done", None)
+
+@pytest.mark.parametrize("index", [1, 2, 3, None])
+def test_explicit_search_index_uses_same_results_without_research(monkeypatch, index):
+    service = DownloadService(AppConfig(), _NullDB(), options=DownloadOptions(index=index))
+    items = [ScoredCandidate(SearchCandidate(url=f"https://youtu.be/{i}"), score=0)
+             for i in (1, 2)]
+    calls = []
+
+    def best(*args, **kwargs):
+        calls.append(args)
+        return None, items
+
+    monkeypatch.setattr(service.search, "best", best)
+    task = DownloadTask(query="Muse - Hysteria", artist="Muse", title="Hysteria")
+    if index in (1, 2):
+        assert service.resolve(task)[0] == f"https://youtu.be/{index}"
+    else:
+        with pytest.raises(RuntimeError):
+            service.resolve(task)
+    assert len(calls) == 1

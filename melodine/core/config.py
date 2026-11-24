@@ -218,6 +218,7 @@ class AppConfig(BaseModel):
 
     theme: str = "dracula"
     language: str = "ru"
+    show_legacy_terminal_notice: bool = True
     search: SearchConfig = Field(default_factory=SearchConfig)
     download: DownloadConfig = Field(default_factory=DownloadConfig)
     audio: AudioConfig = Field(default_factory=AudioConfig)

@@ -43,8 +43,12 @@ directly. Melodine deliberately trades some generality for a music-library workf
 
 **Requirements:** Python 3.10+ and [FFmpeg](https://ffmpeg.org/download.html) available in `PATH`.
 
+**Windows:** We recommend [Windows Terminal](https://learn.microsoft.com/en-us/windows/terminal/install) for the full color palette and modern terminal rendering. Use either CMD or PowerShell inside it. The classic Windows console remains supported in compact mode.
+
+**Network:** YouTube availability varies by region. If requests time out, check connectivity on the same device, including firewall and existing VPN/proxy settings. Melodine does not manage network restrictions.
+
 ```bash
-pipx install git+https://github.com/KROFN/melodine.git@v2.0.1
+pipx install git+https://github.com/KROFN/melodine.git@v2.1.0
 melodine
 ```
 
@@ -56,13 +60,13 @@ Running `melodine` without arguments opens the TUI. The short alias `mld` is ins
 With regular `pip`:
 
 ```bash
-pip install git+https://github.com/KROFN/melodine.git@v2.0.1
+pip install git+https://github.com/KROFN/melodine.git@v2.1.0
 ```
 
 One-off run with `uvx`:
 
 ```bash
-uvx --from git+https://github.com/KROFN/melodine.git@v2.0.1 melodine
+uvx --from git+https://github.com/KROFN/melodine.git@v2.1.0 melodine
 ```
 
 </details>

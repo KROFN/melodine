@@ -14,6 +14,7 @@ from rich.progress import (
     BarColumn,
     DownloadColumn,
     Progress,
+    ProgressColumn,
     SpinnerColumn,
     TextColumn,
     TimeRemainingColumn,
@@ -65,18 +66,31 @@ def draw_banner(theme: Theme, subtitle: str | None = None) -> None:
     console.print()
 
 
+class TransferOnlyColumn(ProgressColumn):
+    """Hide stale transfer metrics while other pipeline stages run."""
+
+    def __init__(self, column: ProgressColumn) -> None:
+        super().__init__()
+        self.column = column
+
+    def render(self, task):
+        if task.fields.get("phase", "transfer") != "transfer":
+            return Text("")
+        return self.column.render(task)
+
+
 def build_progress(theme: Theme) -> Progress:
     """A download progress with speed and ETA columns."""
     return Progress(
         SpinnerColumn(style=theme.primary),
-        TextColumn("[bold]{task.description}"),
-        BarColumn(
+        TextColumn("{task.description}", markup=False),
+        TransferOnlyColumn(BarColumn(
             complete_style=theme.bar_complete,
             finished_style=theme.success,
-        ),
-        DownloadColumn(),
-        TransferSpeedColumn(),
-        TimeRemainingColumn(),
+        )),
+        TransferOnlyColumn(DownloadColumn()),
+        TransferOnlyColumn(TransferSpeedColumn()),
+        TransferOnlyColumn(TimeRemainingColumn()),
         console=console,
     )
 
@@ -96,7 +110,9 @@ def score_bar(theme: Theme, score: int, width: int = 10) -> str:
 def render_scored_results(scored: list[ScoredCandidate], theme: Theme, limit: int = 12) -> None:
     """Anti-MV ranked search results table."""
     table = Table(
-        title=f"[{theme.title}]✦ {t('search_title')}[/]",
+        title=Text(t("search_title"), style=f"bold {theme.primary}"),
+        title_justify="left",
+        header_style=f"bold {theme.accent}",
         border_style=theme.border,
         box=box.ROUNDED,
         show_lines=False,
@@ -114,10 +130,13 @@ def render_scored_results(scored: list[ScoredCandidate], theme: Theme, limit: in
         badge_style = BADGE_STYLES.get(item.badge, "muted")
         badge_color = getattr(theme, badge_style)
         badge_key = f"badge_{item.badge}"
+        channel_text = Text(item.candidate.channel)
+        if item.candidate.channel_is_verified is True:
+            channel_text.append(" ✓", style=theme.success)
         table.add_row(
             str(i),
-            item.candidate.title[:64],
-            item.candidate.channel[:28],
+            Text(item.candidate.title),
+            channel_text,
             format_duration(item.candidate.duration),
             score_bar(theme, item.score),
             f"[{badge_color}]{t(badge_key)}[/]",
@@ -127,24 +146,31 @@ def render_scored_results(scored: list[ScoredCandidate], theme: Theme, limit: in
 
 def render_score_reasons(scored: ScoredCandidate, theme: Theme) -> None:
     """Metadata preview panel explaining why a candidate scored as it did."""
-    lines: list[str] = []
+    from melodine.services.scoring import BASE_SCORE
+
+    body = Text(t("score_base", score=BASE_SCORE))
     for reason in scored.reasons:
-        color = theme.success if reason.points > 0 else theme.error
-        sign = "+" if reason.points > 0 else ""
-        value = f" ({reason.value})" if reason.value else ""
-        lines.append(
-            f"[{theme.muted}]•[/] {t(reason.key)}{value} "
-            f"[{color}]{sign}{reason.points}[/]"
+        color = (theme.success if reason.points > 0 else
+                 theme.error if reason.points < 0 else theme.muted)
+        value = reason.value
+        description = t(
+            reason.key, delta=value.removesuffix("s"), percent=value.removesuffix("%"),
+            kind=value,
         )
-    if not lines:
-        lines.append(f"[{theme.muted}]{t('not_available')}[/]")
+        if value == "requested":
+            description += " (" + t("score_requested") + ")"
+        body.append("\n" + description + "  ")
+        body.append(f"{reason.points:+d}", style=color)
+    if not scored.reasons:
+        body.append("\n" + t("score_no_signals"), style=theme.muted)
+    body.append("\n" + t("score_total", score=scored.score), style=f"bold {theme.primary}")
     console.print(
         Panel(
-            "\n".join(lines),
-            title=f"[{theme.title}]{t('search_details_title')}[/] "
-            f"[{theme.primary}]{scored.candidate.title[:48]}[/] "
-            f"({t('search_col_score')} {scored.score})",
+            body,
+            title=Text(t("search_details_title"), style=theme.title),
+            subtitle=Text(scored.candidate.title),
             border_style=theme.border,
+            width=min(console.width, 88),
         )
     )
 
@@ -161,13 +187,15 @@ def render_download_results(results: list[DownloadResult], theme: Theme) -> None
     if not results:
         return
     table = Table(
-        title=f"[{theme.title}]✦ {t('panel_result')}[/]",
+        title=Text(t("panel_result"), style=f"bold {theme.primary}"),
+        title_justify="left",
+        header_style=f"bold {theme.accent}",
         border_style=theme.border,
         box=box.ROUNDED,
     )
     table.add_column("", width=2)
     table.add_column(t("search_col_title"), style=theme.primary, ratio=3)
-    table.add_column(t("result_artwork"), justify="center", width=3)
+    table.add_column(t("result_artwork"), justify="center", no_wrap=True)
     table.add_column(t("result_lyrics"), justify="center", ratio=1)
     table.add_column("SB", justify="center", width=3)
     table.add_column("R128", justify="center", width=4)
@@ -175,7 +203,7 @@ def render_download_results(results: list[DownloadResult], theme: Theme) -> None
     for result in results:
         label = result.meta.title or result.task.title or result.task.query
         if result.duplicate and result.status == "skipped":
-            label = f"{label} [{theme.muted}]({t('result_duplicate')})[/]"
+            label = f"{label} ({t('result_duplicate')})"
         artwork = (
             f"[{theme.success}]✓[/]" if result.artwork_embedded else f"[{theme.muted}]–[/]"
         )
@@ -193,7 +221,7 @@ def render_download_results(results: list[DownloadResult], theme: Theme) -> None
         )
         table.add_row(
             _status_icon(theme, result.status),
-            label[:60],
+            Text(label),
             artwork,
             lyrics,
             sponsorblock,
@@ -257,7 +285,13 @@ class ProgressBridge:
             with self._lock:
                 if event == "start":
                     label = f"{payload.get('title', task.title or task.query)[:48]}"
-                    self._tasks[task.task_id] = self.progress.add_task(label, total=100.0)
+                    self._labels[task.task_id] = label
+                    if task.task_id in self._tasks:
+                        self.progress.update(self._tasks[task.task_id], description=label)
+                    else:
+                        self._tasks[task.task_id] = self.progress.add_task(
+                            label, total=None, phase="processing"
+                        )
                 elif event == "progress" and task.task_id in self._tasks:
                     total = float(payload.get("total") or 0)
                     downloaded = float(payload.get("downloaded") or 0)
@@ -268,24 +302,22 @@ class ProgressBridge:
                             completed=downloaded,
                             total=total,
                             speed=speed,
+                            phase="transfer",
+                            description=self._labels[task.task_id],
                         )
                     else:
                         self.progress.update(
-                            self._tasks[task.task_id], total=None, speed=speed
+                            self._tasks[task.task_id], total=None, speed=speed, phase="transfer",
+                            description=self._labels[task.task_id],
                         )
                 elif event == "post" and task.task_id in self._tasks:
                     stage = str(payload.get("stage") or "")
                     label = self._labels.get(task.task_id, "")
-                    if stage == "normalize":
-                        self.progress.update(
-                            self._tasks[task.task_id],
-                            description=f"{label} [R128]",
-                        )
-                    elif stage == "lyrics":
-                        self.progress.update(
-                            self._tasks[task.task_id],
-                            description=f"{label} [LRC]",
-                        )
+                    self.progress.reset(
+                        self._tasks[task.task_id],
+                        description=f"{label} · {t('stage_' + stage)}",
+                        total=1, completed=0, phase="processing",
+                    )
                 elif event == "done" and task.task_id in self._tasks:
                     result = payload.get("result")
                     task_id = self._tasks[task.task_id]
@@ -294,13 +326,13 @@ class ProgressBridge:
                     else:
                         self.progress.update(task_id, completed=0.0, total=100.0)
                     icon = {
-                        "success": f"[{self.theme.success}]✓",
-                        "skipped": f"[{self.theme.muted}]–",
-                        "failed": f"[{self.theme.error}]✗",
-                        "cancelled": f"[{self.theme.warning}]!",
+                        "success": "✓",
+                        "skipped": "–",
+                        "failed": "✗",
+                        "cancelled": "!",
                     }.get(getattr(result, "status", "failed"), "!")
                     label = self._labels.get(task.task_id, "")
-                    self.progress.update(task_id, description=f"{icon} {label}")
+                    self.progress.update(task_id, description=f"{icon} {label}", phase="done")
         except Exception:  # never let UI break downloads
             pass
 
@@ -322,7 +354,7 @@ class QueueLive:
         self._live = Live(
             self,
             console=console,
-            refresh_per_second=6,
+            refresh_per_second=4,
         )
         self._live.start()
         return self
@@ -338,8 +370,11 @@ class QueueLive:
         lines = self.status_provider()
         return Panel(
             "\n".join(lines),
-            title=f"[{self.theme.title}]✦ {t('queue_title')}[/]",
+            title=Text(t("queue_title"), style=f"bold {self.theme.primary}"),
+            title_align="left",
+            box=box.ROUNDED,
             border_style=self.theme.border,
+            width=min(console.width, 88),
         )
 
     def refresh(self) -> None:

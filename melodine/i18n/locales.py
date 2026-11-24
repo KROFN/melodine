@@ -9,6 +9,78 @@ from __future__ import annotations
 
 _strings: dict[str, dict[str, str]] = {
     "ru": {
+        "guide_network": (
+            "Доступность YouTube зависит от региона. При тайм-аутах проверьте "
+            "подключение на этом устройстве, включая файрвол и настройки "
+            "уже используемого VPN/прокси. Соблюдайте местное законодательство."
+        ),
+        "paths_help": (
+            "Вставьте путь к папке (можно в кавычках). Относительный путь считается "
+            "от текущей рабочей папки. Пустой Enter — отмена."
+        ),
+        "paths_resolved": "Полный путь: {path}",
+        "paths_confirm": "Использовать эту папку?",
+        "paths_create": "Папки пока нет. Создать и использовать её?",
+        "stage_resolve": "Поиск источника",
+        "stage_inspect": "Получение информации",
+        "stage_metadata": "Поиск метаданных",
+        "stage_prepare": "Подготовка загрузки",
+        "stage_sponsorblock": "Проверка SponsorBlock",
+        "stage_convert": "Обработка аудио (FFmpeg)",
+        "stage_cut": "Удаление сегментов",
+        "stage_normalize": "Нормализация громкости",
+        "stage_artwork": "Загрузка обложки",
+        "stage_lyrics": "Поиск текста",
+        "stage_tags": "Запись тегов",
+        "stage_persist": "Сохранение в медиатеке",
+        "menu_guide": "Быстрый старт / Справка",
+        "guide_title": "Быстрый старт",
+        "guide_intro": "Melodine: скачивайте музыку и собирайте локальную медиатеку.",
+        "guide_search": (
+            "1 — Поиск: введите «Исполнитель - Трек» или ссылку YouTube. Выберите нужный "
+            "результат по номеру."
+        ),
+        "guide_playlist": "2 — Плейлист: укажите путь к .txt (один трек на строку).",
+        "guide_settings": (
+            "9 — Настройки: выберите формат аудио, папку, тему и язык. MP3 — универсальный "
+            "вариант."
+        ),
+        "guide_doctor": "7 — Диагностика: проверьте FFmpeg и доступность внешних сервисов.",
+        "guide_resume": (
+            "Ctrl+C — остановка загрузки. При следующем запуске можно продолжить "
+            "сохранённую очередь."
+        ),
+        "guide_output": "Папка музыки: {path}",
+        "guide_navigation": (
+            "Введите номер действия и нажмите Enter. h — эта справка, t — тема, g — язык, "
+            "q — выход."
+        ),
+        "codec_help_opus": (
+            "Эффективное сжатие; меньше файловый размер. 160 кбит/с — хороший ориентир."
+        ),
+        "codec_help_mp3": (
+            "Самая широкая совместимость, в том числе старые плееры. Пресет 320 кбит/с."
+        ),
+        "codec_help_m4a": "AAC в контейнере M4A; удобно для устройств Apple. Пресет 256 кбит/с.",
+        "codec_help_flac": (
+            "Без потерь при кодировании, крупные файлы. Не улучшает исходное качество "
+            "YouTube."
+        ),
+        "choice_hint": (
+            "Введите номер и Enter. Enter без номера — сохранить текущий выбор; 0 — назад."
+        ),
+        "bitrate_help": (
+            "Целевой битрейт: больше — обычно крупнее файл; качество ограничено "
+            "источником."
+        ),
+        "normalize_help": (
+            "Нормализация выравнивает воспринимаемую громкость; может потребовать "
+            "перекодирования."
+        ),
+        "threads_help": (
+            "Число параллельных загрузок. 2–4 обычно достаточно; больше — выше нагрузка."
+        ),
+        "export_scope_choices": "  [1] Медиатека   [2] История",
         # -- common --
         "app_tagline": "Твой плейлист. Скачан. Красиво.",
         "goodbye": "До встречи!",
@@ -34,7 +106,7 @@ _strings: dict[str, dict[str, str]] = {
         "menu_export": "Экспорт библиотеки",
         "menu_settings": "Настройки",
         "menu_exit": "Выход",
-        "menu_hint": "Горячие клавиши: [t] тема  [g] язык  [q] выход",
+        "menu_hint": "Горячие клавиши: [h] справка  [t] тема  [g] язык  [q] выход",
         "menu_active_downloads": "Активных загрузок: {n}",
         # -- search --
         "search_title": "Поиск трека",
@@ -53,18 +125,27 @@ _strings: dict[str, dict[str, str]] = {
         "badge_live": "ЛАЙВ",
         "badge_alt": "АЛЬТ",
         "search_select": "Номер трека для загрузки (0 - отмена):",
-        "search_details_title": "Почему выбран этот вариант",
+        "search_details_title": "Оценка выбранного варианта",
+        "score_base": "Базовая оценка: {score}",
+        "score_no_signals": "Дополнительных признаков не найдено. Версия не подтверждена.",
+        "score_requested": "версия запрошена",
+        "score_total": "Итоговая оценка: {score}/100",
         "search_select_hint": "Введите номер, 0 - отмена",
         "search_cancel": "Отменено",
         "search_added_queue": "Добавлено в очередь: {n}",
         # -- score reasons --
-        "score_reason_topic": "официальный аудио-канал (- Topic)",
+        "score_reason_artist_match": "совпадает имя исполнителя",
+        "score_reason_verified_artist": "верифицированный канал совпадающего исполнителя",
+        "score_reason_title_transliterated": "название совпадает по транслитерации",
+        "score_reason_topic": "название канала имеет суффикс - Topic",
         "score_reason_official_audio": "Official Audio в названии",
+        "score_reason_audio_claim": "Official Audio без совпадения канала",
         "score_reason_audio": "аудио-версия в названии",
         "score_reason_lyrics": "текст песни без видеовставок",
         "score_reason_duration_exact": "длительность совпадает точно",
         "score_reason_duration_close": "длительность близка ({delta} сек)",
         "score_reason_duration_far": "длительность сильно отличается ({delta} сек)",
+        "score_penalty_title_mismatch": "нет достаточного совпадения названия трека",
         "score_reason_title_exact": "название совпадает точно",
         "score_reason_title_similar": "похожее название ({percent}%)",
         "score_reason_intent_match": "совпадает с вашим запросом ({kind})",
@@ -96,7 +177,7 @@ _strings: dict[str, dict[str, str]] = {
         ),
         "queue_resumed": "Возобновлено загрузок из прошлой сессии: {n}",
         "queue_resume_prompt": "Найдено {n} незавершённых загрузок. Возобновить?",
-        "queue_return_hint": "Enter - обновить, Esc/Ctrl+C - прервать",
+        "queue_return_hint": "Обновляется автоматически · Ctrl+C — остановка",
         # -- result panel --
         "panel_result": "Результат",
         "result_ok": "Скачано:",
@@ -305,6 +386,70 @@ _strings: dict[str, dict[str, str]] = {
         "dedup_skipped": "Дубликат: {title}",
     },
     "en": {
+        "guide_network": (
+            "YouTube access varies by region. If searches or downloads time out, "
+            "check connectivity from the same system, including firewall and "
+            "existing VPN/proxy settings. Follow applicable local law."
+        ),
+        "paths_help": (
+            "Paste a folder path (quotes accepted). Relative paths are resolved from "
+            "the working directory. Empty Enter cancels."
+        ),
+        "paths_resolved": "Resolved path: {path}",
+        "paths_confirm": "Use this folder?",
+        "paths_create": "Folder does not exist. Create and use it?",
+        "stage_resolve": "Finding source",
+        "stage_inspect": "Inspecting source",
+        "stage_metadata": "Finding metadata",
+        "stage_prepare": "Preparing download",
+        "stage_sponsorblock": "Checking SponsorBlock",
+        "stage_convert": "Processing audio (FFmpeg)",
+        "stage_cut": "Removing segments",
+        "stage_normalize": "Normalizing loudness",
+        "stage_artwork": "Fetching artwork",
+        "stage_lyrics": "Finding lyrics",
+        "stage_tags": "Writing tags",
+        "stage_persist": "Saving to library",
+        "menu_guide": "Quick start / Help",
+        "guide_title": "Quick start",
+        "guide_intro": "Melodine: download music and build a local library.",
+        "guide_search": (
+            "1 — Search: enter Artist - Track or a YouTube URL. Choose a result by its "
+            "number."
+        ),
+        "guide_playlist": "2 — Playlist: enter a path to a .txt file (one track per line).",
+        "guide_settings": (
+            "9 — Settings: choose the audio format, output folder, theme and language. MP3 "
+            "is a versatile choice."
+        ),
+        "guide_doctor": "7 — Doctor: check FFmpeg and connectivity to external services.",
+        "guide_resume": (
+            "Ctrl+C — stop a download. On the next launch, you can resume a saved queue."
+        ),
+        "guide_output": "Music folder: {path}",
+        "guide_navigation": (
+            "Enter an action number and press Enter. h — this guide, t — theme, g — "
+            "language, q — quit."
+        ),
+        "codec_help_opus": (
+            "Efficient compression for smaller files. 160 kbps is a good starting point."
+        ),
+        "codec_help_mp3": "Broad compatibility, including older players. 320 kbps preset.",
+        "codec_help_m4a": "AAC in an M4A container; convenient for Apple devices. 256 kbps preset.",
+        "codec_help_flac": (
+            "Lossless encoding, larger files. Cannot improve the original YouTube audio."
+        ),
+        "choice_hint": (
+            "Type a number and press Enter. Enter alone keeps the current choice; 0 goes "
+            "back."
+        ),
+        "bitrate_help": (
+            "Target bitrate: higher usually means larger files; quality is limited by the "
+            "source."
+        ),
+        "normalize_help": "Normalization evens out perceived loudness and may require re-encoding.",
+        "threads_help": "Parallel downloads. 2–4 is usually enough; more increases resource use.",
+        "export_scope_choices": "  [1] Library   [2] History",
         # -- common --
         "app_tagline": "Your playlist. Downloaded. Beautifully.",
         "goodbye": "Goodbye!",
@@ -330,7 +475,7 @@ _strings: dict[str, dict[str, str]] = {
         "menu_export": "Export library",
         "menu_settings": "Settings",
         "menu_exit": "Exit",
-        "menu_hint": "Hotkeys: [t] theme  [g] language  [q] quit",
+        "menu_hint": "Hotkeys: [h] guide  [t] theme  [g] language  [q] quit",
         "menu_active_downloads": "Active downloads: {n}",
         # -- search --
         "search_title": "Track search",
@@ -349,18 +494,27 @@ _strings: dict[str, dict[str, str]] = {
         "badge_live": "LIVE",
         "badge_alt": "ALT",
         "search_select": "Track number to download (0 - cancel):",
-        "search_details_title": "Why this candidate was picked",
+        "search_details_title": "Selected candidate score",
+        "score_base": "Base score: {score}",
+        "score_no_signals": "No additional signals found. Version not verified.",
+        "score_requested": "requested variant",
+        "score_total": "Final score: {score}/100",
         "search_select_hint": "Enter a number, 0 to cancel",
         "search_cancel": "Cancelled",
         "search_added_queue": "Added to queue: {n}",
         # -- score reasons --
-        "score_reason_topic": "official audio channel (- Topic)",
+        "score_reason_artist_match": "artist name matches",
+        "score_reason_verified_artist": "verified channel matching the requested artist",
+        "score_reason_title_transliterated": "title matches across scripts",
+        "score_reason_topic": "channel name has - Topic suffix",
         "score_reason_official_audio": "Official Audio in title",
+        "score_reason_audio_claim": "Official Audio claim without channel match",
         "score_reason_audio": "audio version in title",
         "score_reason_lyrics": "lyrics version without video cuts",
         "score_reason_duration_exact": "duration matches exactly",
         "score_reason_duration_close": "duration is close ({delta}s)",
         "score_reason_duration_far": "duration differs a lot ({delta}s)",
+        "score_penalty_title_mismatch": "insufficient track title match",
         "score_reason_title_exact": "title matches exactly",
         "score_reason_title_similar": "similar title ({percent}%)",
         "score_reason_intent_match": "matches your explicit request ({kind})",
@@ -389,7 +543,7 @@ _strings: dict[str, dict[str, str]] = {
         "queue_saved_state": "Saved {n} unfinished downloads. Run Melodine again to resume.",
         "queue_resumed": "Resumed downloads from last session: {n}",
         "queue_resume_prompt": "Found {n} unfinished downloads. Resume them?",
-        "queue_return_hint": "Enter - refresh, Esc/Ctrl+C - interrupt",
+        "queue_return_hint": "Updates automatically · Ctrl+C — stop",
         # -- result panel --
         "panel_result": "Result",
         "result_ok": "Downloaded:",
