@@ -201,7 +201,10 @@ def score_candidate(
         ):
             _add("score_reason_topic", 40)
         if _B_OFFICIAL_AUDIO.search(text):
-            _add("score_reason_official_audio", 25)
+            if requested and not (channel_match or corroborated_typo):
+                _add("score_reason_audio_claim", 8)
+            else:
+                _add("score_reason_official_audio", 25)
         elif _B_AUDIO.search(text):
             _add("score_reason_audio", 10)
         if _B_LYRICS.search(text) and not _P_MUSIC_VIDEO.search(text):
