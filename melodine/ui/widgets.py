@@ -14,6 +14,7 @@ from rich.progress import (
     BarColumn,
     DownloadColumn,
     Progress,
+    ProgressColumn,
     SpinnerColumn,
     TextColumn,
     TimeRemainingColumn,
@@ -65,6 +66,19 @@ def draw_banner(theme: Theme, subtitle: str | None = None) -> None:
     console.print()
 
 
+class TransferOnlyColumn(ProgressColumn):
+    """Hide stale transfer metrics while other pipeline stages run."""
+
+    def __init__(self, column: ProgressColumn) -> None:
+        super().__init__()
+        self.column = column
+
+    def render(self, task):
+        if task.fields.get("phase", "transfer") != "transfer":
+            return Text("")
+        return self.column.render(task)
+
+
 def build_progress(theme: Theme) -> Progress:
     """A download progress with speed and ETA columns."""
     return Progress(
@@ -74,9 +88,9 @@ def build_progress(theme: Theme) -> Progress:
             complete_style=theme.bar_complete,
             finished_style=theme.success,
         ),
-        DownloadColumn(),
-        TransferSpeedColumn(),
-        TimeRemainingColumn(),
+        TransferOnlyColumn(DownloadColumn()),
+        TransferOnlyColumn(TransferSpeedColumn()),
+        TransferOnlyColumn(TimeRemainingColumn()),
         console=console,
     )
 
@@ -272,7 +286,12 @@ class ProgressBridge:
                 if event == "start":
                     label = f"{payload.get('title', task.title or task.query)[:48]}"
                     self._labels[task.task_id] = label
-                    self._tasks[task.task_id] = self.progress.add_task(label, total=100.0)
+                    if task.task_id in self._tasks:
+                        self.progress.update(self._tasks[task.task_id], description=label)
+                    else:
+                        self._tasks[task.task_id] = self.progress.add_task(
+                            label, total=None, phase="processing"
+                        )
                 elif event == "progress" and task.task_id in self._tasks:
                     total = float(payload.get("total") or 0)
                     downloaded = float(payload.get("downloaded") or 0)
@@ -283,24 +302,22 @@ class ProgressBridge:
                             completed=downloaded,
                             total=total,
                             speed=speed,
+                            phase="transfer",
+                            description=self._labels[task.task_id],
                         )
                     else:
                         self.progress.update(
-                            self._tasks[task.task_id], total=None, speed=speed
+                            self._tasks[task.task_id], total=None, speed=speed, phase="transfer",
+                            description=self._labels[task.task_id],
                         )
                 elif event == "post" and task.task_id in self._tasks:
                     stage = str(payload.get("stage") or "")
                     label = self._labels.get(task.task_id, "")
-                    if stage == "normalize":
-                        self.progress.update(
-                            self._tasks[task.task_id],
-                            description=f"{label} [R128]",
-                        )
-                    elif stage == "lyrics":
-                        self.progress.update(
-                            self._tasks[task.task_id],
-                            description=f"{label} [LRC]",
-                        )
+                    self.progress.update(
+                        self._tasks[task.task_id],
+                        description=f"{label} · {t('stage_' + stage)}",
+                        total=None, completed=0, phase="processing",
+                    )
                 elif event == "done" and task.task_id in self._tasks:
                     result = payload.get("result")
                     task_id = self._tasks[task.task_id]
@@ -315,7 +332,7 @@ class ProgressBridge:
                         "cancelled": "!",
                     }.get(getattr(result, "status", "failed"), "!")
                     label = self._labels.get(task.task_id, "")
-                    self.progress.update(task_id, description=f"{icon} {label}")
+                    self.progress.update(task_id, description=f"{icon} {label}", phase="done")
         except Exception:  # never let UI break downloads
             pass
 
@@ -337,7 +354,7 @@ class QueueLive:
         self._live = Live(
             self,
             console=console,
-            refresh_per_second=6,
+            refresh_per_second=4,
         )
         self._live.start()
         return self
@@ -357,6 +374,7 @@ class QueueLive:
             title_align="left",
             box=box.ROUNDED,
             border_style=self.theme.border,
+            width=min(console.width, 88),
         )
 
     def refresh(self) -> None:
