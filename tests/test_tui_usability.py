@@ -344,6 +344,16 @@ def test_guide_network_notice_is_bounded(ui, monkeypatch, lang, heading):
     monkeypatch.setattr(app, "_wait_enter", lambda: None)
     app.screen_guide()
     lines = output.getvalue().splitlines()
-    title_line = next(line for line in lines if heading in line)
+    notice_start = next(i for i, line in enumerate(lines) if heading in line)
+    title_line = lines[notice_start]
     assert "╭" in title_line and "╮" in title_line
+    # Only whitespace separates the two panels.
+    previous = next(line for line in reversed(lines[:notice_start]) if line.strip())
+    assert previous.strip().startswith("╰")
+    notice_end = next(i for i in range(notice_start, len(lines)) if "╰" in lines[i])
+    folder_label = "Папка музыки" if lang == "ru" else "Music folder"
+    folder_line = next(i for i, line in enumerate(lines) if line.strip() == folder_label)
+    resume_line = next(i for i, line in enumerate(lines) if "Ctrl+C" in line)
+    assert notice_end < folder_line < resume_line
+    assert lines[folder_line + 1].strip().startswith("↳")
     assert all(len(line) <= 88 for line in lines if "YouTube" in line)
