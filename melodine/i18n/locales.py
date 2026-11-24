@@ -10,9 +10,9 @@ from __future__ import annotations
 _strings: dict[str, dict[str, str]] = {
     "ru": {
         "guide_network": (
-            "Если YouTube недоступен в вашем регионе (в том числе в РФ), проверьте "
-            "доступ к нему из той же системы. При необходимости используйте "
-            "разрешённые местным законодательством сетевые решения (VPN или zapret)."
+            "Доступность YouTube зависит от региона. При тайм-аутах проверьте "
+            "подключение на этом устройстве, включая файрвол и настройки "
+            "уже используемого VPN/прокси. Соблюдайте местное законодательство."
         ),
         "paths_help": (
             "Вставьте путь к папке (можно в кавычках). Относительный путь считается "
@@ -386,9 +386,9 @@ _strings: dict[str, dict[str, str]] = {
     },
     "en": {
         "guide_network": (
-            "If YouTube is unavailable in your region (including Russia), check "
-            "access from the same system. Where lawful, use a suitable network "
-            "solution (VPN or zapret)."
+            "YouTube access varies by region. If searches or downloads time out, "
+            "check connectivity from the same system, including firewall and "
+            "existing VPN/proxy settings. Follow applicable local law."
         ),
         "paths_help": (
             "Paste a folder path (quotes accepted). Relative paths are resolved from "
