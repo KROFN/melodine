@@ -379,7 +379,14 @@ class MelodineTUI:
         console.print(Text(t("guide_output", path=str(
             Path(self.cfg.output.folder).expanduser().resolve())), style=self.theme.accent))
         console.print(Text(t("guide_resume"), style=self.theme.muted))
-        console.print(Text(t("guide_network"), style=self.theme.warning))
+        console.print()
+        notice = shell.panel(console, self.theme, Text(t("guide_network")),
+                             shell.tr("Доступ к YouTube", "YouTube connectivity"))
+        notice.title = Text(shell.tr("Доступ к YouTube", "YouTube connectivity"),
+                            style=f"bold {self.theme.warning}")
+        notice.border_style = self.theme.warning
+        console.print(notice)
+        console.print()
         console.print(Text(shell.tr(
             "↑↓ и Enter — выбор · Esc — назад · h — справка",
             "↑↓ and Enter — select · Esc — back · h — guide",
