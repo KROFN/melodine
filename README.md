@@ -43,6 +43,8 @@ directly. Melodine deliberately trades some generality for a music-library workf
 
 **Requirements:** Python 3.10+ and [FFmpeg](https://ffmpeg.org/download.html) available in `PATH`.
 
+**Windows:** We recommend [Windows Terminal](https://learn.microsoft.com/en-us/windows/terminal/install) for the full color palette and modern terminal rendering. Use either CMD or PowerShell inside it. The classic Windows console remains supported in compact mode.
+
 ```bash
 pipx install git+https://github.com/KROFN/melodine.git@v2.0.1
 melodine
