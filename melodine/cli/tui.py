@@ -184,6 +184,7 @@ class MelodineTUI:
         console.print(detail)
         if not shell.keyboard_available(console):
             shell.choice_rows(console, self.theme, self._menu_items())
+            console.print(Text(t("menu_hint"), style=self.theme.muted))
         console.print()
 
     def _main_menu(self) -> bool:
@@ -389,7 +390,6 @@ class MelodineTUI:
             default="", show_default=False,
         ).strip()
         if not query:
-            console.print(f"[{self.theme.warning}]{t('search_empty')}[/]")
             return
 
         if query.startswith("http"):
@@ -947,6 +947,8 @@ class MelodineTUI:
 
     def _settings_theme(self) -> None:
         self._screen(t("settings_theme"))
+        shell.heading(console, self.theme, shell.tr("Оформление", "Appearance"),
+                      shell.tr("Выбери палитру интерфейса.", "Choose the interface palette."))
         labels = list_themes()
         console.print(f"[{self.theme.muted}]{t('theme_current')}[/] {self.theme.label}\n")
         table = Table.grid(padding=(0, 2), expand=True)
