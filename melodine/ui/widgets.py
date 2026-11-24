@@ -116,10 +116,13 @@ def render_scored_results(scored: list[ScoredCandidate], theme: Theme, limit: in
         badge_style = BADGE_STYLES.get(item.badge, "muted")
         badge_color = getattr(theme, badge_style)
         badge_key = f"badge_{item.badge}"
+        channel_text = Text(item.candidate.channel)
+        if item.candidate.channel_is_verified is True:
+            channel_text.append(" ✓", style=theme.success)
         table.add_row(
             str(i),
             Text(item.candidate.title),
-            Text(item.candidate.channel),
+            channel_text,
             format_duration(item.candidate.duration),
             score_bar(theme, item.score),
             f"[{badge_color}]{t(badge_key)}[/]",
