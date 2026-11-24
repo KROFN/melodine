@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import contextlib
 import os
+import tempfile
 import time
 from pathlib import Path
 from typing import Any
@@ -378,6 +379,7 @@ class MelodineTUI:
         console.print(Text(t("guide_output", path=str(
             Path(self.cfg.output.folder).expanduser().resolve())), style=self.theme.accent))
         console.print(Text(t("guide_resume"), style=self.theme.muted))
+        console.print(Text(t("guide_network"), style=self.theme.warning))
         console.print(Text(shell.tr(
             "↑↓ и Enter — выбор · Esc — назад · h — справка",
             "↑↓ and Enter — select · Esc — back · h — guide",
@@ -1053,14 +1055,39 @@ class MelodineTUI:
 
     def _settings_paths(self) -> None:
         self._screen(t("settings_paths"))
-        console.print(
-            f"[{self.theme.muted}]{t('paths_current')}[/] "
-            f"[{self.theme.primary}]{self.cfg.output.folder}[/]"
-        )
-        folder = Prompt.ask(t("paths_prompt"), default=self.cfg.output.folder).strip()
-        if folder:
-            self.cfg.output.folder = folder
-        self._save()
+        current = self.cfg.output.folder
+        console.print(Text(t("paths_current") + " " + str(Path(current).expanduser().resolve())))
+        console.print(Text(t("paths_help"), style=self.theme.muted))
+        while True:
+            raw = Prompt.ask(t("paths_prompt"), default="", show_default=False).strip()
+            if not raw:
+                return
+            try:
+                raw = raw.strip('"').strip()
+                if not raw:
+                    raise ValueError(t("invalid_value"))
+                folder = Path(os.path.expandvars(raw)).expanduser().resolve()
+                if folder.exists() and not folder.is_dir():
+                    raise NotADirectoryError(str(folder))
+                console.print(Text(t("paths_resolved", path=str(folder)),
+                                   style=self.theme.accent))
+                question = "paths_confirm" if folder.exists() else "paths_create"
+                if not Confirm.ask(t(question), default=False):
+                    return
+                folder.mkdir(parents=True, exist_ok=True)
+                # Verify actual write access rather than relying on os.access.
+                with tempfile.TemporaryFile(dir=folder):
+                    pass
+                self.cfg.output.folder = str(folder)
+                try:
+                    save_config(self.cfg)
+                except OSError:
+                    self.cfg.output.folder = current
+                    raise
+                console.print(Text(t("paths_set", path=str(folder)), style=self.theme.success))
+                return
+            except (OSError, ValueError, RuntimeError) as exc:
+                console.print(Text(t("error_generic", error=exc), style=self.theme.error))
 
     def _settings_theme(self) -> None:
         labels = list_themes()
