@@ -127,7 +127,9 @@ def test_guide_shows_output_and_navigation(ui, monkeypatch):
     app, output = ui
     monkeypatch.setattr(app, "_wait_enter", lambda: None)
     app.screen_guide()
-    assert str(Path(app.cfg.output.folder).resolve()) in output.getvalue()
+    # A long Windows path may wrap inside the bounded Rich panel.
+    rendered = "".join(line.strip("│ ") for line in output.getvalue().splitlines())
+    assert str(Path(app.cfg.output.folder).resolve()) in rendered
     assert "Ctrl+C" in output.getvalue()
 
 
