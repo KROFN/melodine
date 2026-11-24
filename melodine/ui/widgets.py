@@ -129,24 +129,31 @@ def render_scored_results(scored: list[ScoredCandidate], theme: Theme, limit: in
 
 def render_score_reasons(scored: ScoredCandidate, theme: Theme) -> None:
     """Metadata preview panel explaining why a candidate scored as it did."""
-    lines: list[str] = []
+    from melodine.services.scoring import BASE_SCORE
+
+    body = Text(t("score_base", score=BASE_SCORE))
     for reason in scored.reasons:
-        color = theme.success if reason.points > 0 else theme.error
-        sign = "+" if reason.points > 0 else ""
-        value = f" ({reason.value})" if reason.value else ""
-        lines.append(
-            f"[{theme.muted}]•[/] {t(reason.key)}{value} "
-            f"[{color}]{sign}{reason.points}[/]"
+        color = (theme.success if reason.points > 0 else
+                 theme.error if reason.points < 0 else theme.muted)
+        value = reason.value
+        description = t(
+            reason.key, delta=value.removesuffix("s"), percent=value.removesuffix("%"),
+            kind=value,
         )
-    if not lines:
-        lines.append(f"[{theme.muted}]{t('not_available')}[/]")
+        if value == "requested":
+            description += " (" + t("score_requested") + ")"
+        body.append("\n" + description + "  ")
+        body.append(f"{reason.points:+d}", style=color)
+    if not scored.reasons:
+        body.append("\n" + t("score_no_signals"), style=theme.muted)
+    body.append("\n" + t("score_total", score=scored.score), style=f"bold {theme.primary}")
     console.print(
         Panel(
-            "\n".join(lines),
-            title=f"[{theme.title}]{t('search_details_title')}[/] "
-            f"[{theme.primary}]{scored.candidate.title[:48]}[/] "
-            f"({t('search_col_score')} {scored.score})",
+            body,
+            title=Text(t("search_details_title"), style=theme.title),
+            subtitle=Text(scored.candidate.title),
             border_style=theme.border,
+            width=min(console.width, 88),
         )
     )
 
