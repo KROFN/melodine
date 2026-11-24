@@ -12,6 +12,7 @@ from rich.prompt import Confirm, Prompt
 
 from melodine.cli import tui as tui_module
 from melodine.cli.tui import MelodineTUI
+from melodine.core.config import load_config
 from melodine.i18n import get_language, set_language
 from melodine.models import DownloadOptions
 from melodine.services.downloader import DownloadService
@@ -191,3 +192,47 @@ def test_legacy_theme_keeps_neutral_readable_text():
     theme = shell.display_theme(get_theme("dracula"), terminal)
     assert theme.primary == "white"
     assert theme.accent == "cyan"
+
+
+@pytest.mark.parametrize(("windows", "legacy", "interactive", "enabled", "expected"), [
+    (True, True, True, True, True),
+    (True, False, True, True, False),
+    (False, True, True, True, False),
+    (True, True, False, True, False),
+    (True, True, True, False, False),
+])
+def test_terminal_notice_gate(ui, monkeypatch, windows, legacy, interactive, enabled, expected):
+    app, _ = ui
+    app.cfg.show_legacy_terminal_notice = enabled
+    monkeypatch.setattr(tui_module, "IS_WINDOWS", windows)
+    terminal = SimpleNamespace(
+        legacy_windows=legacy, is_terminal=interactive, is_dumb_terminal=False
+    )
+    monkeypatch.setattr(tui_module, "console", terminal)
+    monkeypatch.setattr(shell, "keyboard_available", lambda console: True)
+    calls = []
+    monkeypatch.setattr(app, "_screen", lambda title: calls.append(title))
+    # Replace only the rendering surface; the actual gate is exercised.
+    terminal.print = lambda *args: None
+    monkeypatch.setattr(shell, "panel", lambda *args: None)
+    monkeypatch.setattr(shell, "select", lambda *args, **kwargs: "0")
+    app._terminal_notice()
+    assert bool(calls) is expected
+    assert app.cfg.show_legacy_terminal_notice is enabled
+
+
+def test_terminal_notice_dismissal_persists(ui, monkeypatch):
+    app, output = ui
+    monkeypatch.setattr(tui_module, "IS_WINDOWS", True)
+    monkeypatch.setattr(tui_module.console, "legacy_windows", True)
+    monkeypatch.setattr(tui_module.console, "_force_terminal", True)
+    monkeypatch.setattr(shell, "keyboard_available", lambda console: True)
+    monkeypatch.setattr(app, "_clear_screen", lambda: None)
+    monkeypatch.setattr(shell, "select", lambda *args, **kwargs: "1")
+    app._terminal_notice()
+    assert "Windows Terminal" in output.getvalue()
+    loaded, _ = load_config()
+    assert not loaded.show_legacy_terminal_notice
+    before = output.getvalue()
+    app._terminal_notice()
+    assert output.getvalue() == before
