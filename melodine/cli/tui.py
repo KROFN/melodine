@@ -32,13 +32,13 @@ from melodine.services.lrclib import LRCLIBClient, write_lrc_file
 from melodine.services.playlists import WatchlistService
 from melodine.services.search import SearchService
 from melodine.services.tagger import Tagger, is_audio_file
+from melodine.ui import shell
 from melodine.ui.themes import Theme, get_theme, list_themes
 from melodine.ui.widgets import (
     ProgressBridge,
     QueueLive,
     build_progress,
     console,
-    draw_banner,
     render_download_results,
     render_score_reasons,
     render_scored_results,
@@ -83,7 +83,7 @@ class MelodineTUI:
     def __init__(self, cfg: AppConfig, *, first_run: bool = False) -> None:
         self.cfg = cfg
         self.first_run = first_run
-        self.theme: Theme = get_theme(cfg.theme)
+        self.theme: Theme = shell.display_theme(get_theme(cfg.theme), console)
         set_language(cfg.language)
         self.db = Database(cfg.database.path)
         self.shutdown = GracefulShutdown()
@@ -147,63 +147,60 @@ class MelodineTUI:
 
     def _screen(self, title: str) -> None:
         self._clear_screen()
-        console.print(Text("Melodine", style=f"bold {self.theme.primary}"))
-        console.print(Text(title, style=f"bold {self.theme.subtitle}"))
-        console.print()
+        shell.header(console, self.theme, title)
+
+    def _menu_items(self) -> list[tuple[str, str]]:
+        labels = dict(MENU_ITEMS)
+        tr = shell.tr
+        return [
+            ("", tr("ЗАГРУЗКА", "DOWNLOAD")),
+            *[(k, t(labels[k])) for k in ("1", "2", "3")],
+            ("", tr("МЕДИАТЕКА", "LIBRARY")),
+            *[(k, t(labels[k])) for k in ("4", "5", "6", "8")],
+            ("", tr("ПРИЛОЖЕНИЕ", "APPLICATION")),
+            *[(k, t(labels[k])) for k in ("9", "7", "h")],
+            ("t", tr("Выбрать тему", "Choose theme")),
+            ("g", tr("Выбрать язык", "Choose language")),
+            ("0", t("menu_exit")),
+        ]
 
     def _draw_dashboard(self) -> None:
         self._clear_screen()
-        draw_banner(self.theme)
+        shell.header(console, self.theme, shell.tr("Главная", "Home"), home=True)
         stats = self.db.get_stats()
-        track_count = self.db.count_tracks()
-        watchlist = self.watchlist.list()
         active = self.pool.active_count if self.pool else 0
-
-        info = Table.grid(padding=(0, 2))
-        info.add_column(style=self.theme.muted, justify="right")
-        info.add_column(style=self.theme.primary)
-        info.add_row(t("stats_total"), f"{stats['total']}")
-        info.add_row(t("library_title"), f"{track_count}")
-        info.add_row(t("wl_title"), f"{len(watchlist)}")
-        if active:
-            info.add_row(
-                t("queue_title"), f"[{self.theme.warning}]{t('menu_active_downloads', n=active)}[/]"
-            )
-        theme_label = dict(list_themes()).get(self.cfg.theme, self.cfg.theme)
-        info.add_row(t("theme_current"), theme_label)
-        info.add_row("Language / Язык", get_language().upper())
-
-        menu_lines = "\n".join(
-            f"  [{self.theme.accent}]\\[{key}][/]  {t(label)}" for key, label in MENU_ITEMS
-        )
-        console.print(
-            Panel(
-                menu_lines,
-                title=f"[{self.theme.title}]Melodine[/]",
-                border_style=self.theme.border,
-                width=min(console.width, 76),
-            )
-        )
-        console.print(info)
-        console.print(Text(t("menu_hint"), style=self.theme.muted))
+        codec = self.cfg.audio.codec.upper()
+        if codec != "FLAC":
+            codec += f" · {self.cfg.audio.bitrate} kbps"
+        shell.status_grid(console, self.theme, [
+            (t("library_title"), str(self.db.count_tracks())),
+            (t("stats_success"), str(stats["success"])),
+            (t("queue_title"), str(active)),
+            (shell.tr("Формат", "Format"), codec),
+        ])
+        detail = Text(f"{self.theme.label}  ·  {get_language().upper()}  ·  ",
+                      style=self.theme.muted)
+        detail.append(str(Path(self.cfg.output.folder).expanduser()), style=self.theme.accent)
+        console.print(detail)
+        if not shell.keyboard_available(console):
+            shell.choice_rows(console, self.theme, self._menu_items())
         console.print()
 
     def _main_menu(self) -> bool:
         """One menu iteration; returns False to exit."""
         self._draw_dashboard()
-        choice = Prompt.ask(
-            f"[{self.theme.primary}]{t('menu_prompt')}[/]",
-            default="",
-            show_default=False,
-        ).strip().lower()
+        choice = shell.select(
+            console, self.theme, t("menu_prompt"), self._menu_items(),
+            default="1", show_rows=False,
+        )
 
         if choice in {"q", "quit", "exit", "0"}:
             return False
         if choice == "t":
-            self._cycle_theme()
+            self._settings_theme()
             return True
         if choice == "g":
-            self._toggle_language()
+            self._choose_language()
             return True
 
         handlers = {
@@ -228,7 +225,7 @@ class MelodineTUI:
 
     def _wait_enter(self) -> None:
         console.print()
-        console.input(f"[{self.theme.muted}]{t('press_enter')}[/]")
+        console.input(Text("← " + t("press_enter"), style=self.theme.muted))
 
     # ------------------------------------------------------------------ #
     # hotkey actions
@@ -241,7 +238,7 @@ class MelodineTUI:
             current = 0
         nxt = self._theme_keys[(current + 1) % len(self._theme_keys)]
         self.cfg.theme = nxt
-        self.theme = get_theme(nxt)
+        self.theme = shell.display_theme(get_theme(nxt), console)
         with contextlib.suppress(OSError):
             save_config(self.cfg)
         label = dict(list_themes()).get(nxt, nxt)
@@ -257,11 +254,11 @@ class MelodineTUI:
 
     def _choose_language(self) -> None:
         self._screen("Language / Язык")
-        console.print("  [1] Русский   •   [2] English", markup=False)
-        console.print("  Enter = current / текущий язык; 0 = back / назад", markup=False)
-        choice = Prompt.ask(
-            "Language / Язык",
-            choices=["1", "2", "0"],
+        shell.heading(console, self.theme, "Language / Язык",
+                      "Choose the interface language / Выберите язык интерфейса")
+        choice = shell.select(
+            console, self.theme, "Language / Язык",
+            [("1", "Русский"), ("2", "English"), ("0", "Back / Назад")],
             default="1" if self.cfg.language == "ru" else "2",
         )
         if choice != "0":
@@ -275,25 +272,29 @@ class MelodineTUI:
 
     def screen_guide(self) -> None:
         self._screen(t("guide_title"))
-        lines = [
-            t("guide_intro"),
-            "",
-            t("guide_search"),
-            t("guide_playlist"),
-            t("guide_settings"),
-            t("guide_doctor"),
-            t("guide_resume"),
-            "",
-            t("guide_output", path=str(Path(self.cfg.output.folder).expanduser().resolve())),
-            t("guide_navigation"),
-        ]
-        console.print(
-            Panel(
-                Text("\n".join(lines)),
-                border_style=self.theme.border,
-                width=min(console.width, 88),
-            )
-        )
+        shell.heading(console, self.theme, shell.tr("Начни с одного трека", "Start with one track"),
+                      t("guide_intro"))
+        steps = Table.grid(padding=(0, 1), expand=True)
+        steps.add_column(width=4, style=f"bold {self.theme.accent}")
+        steps.add_column(ratio=1)
+        for number, label, hint in [
+            ("01", t("menu_search"), t("guide_search")),
+            ("02", t("menu_playlist"), t("guide_playlist")),
+            ("03", t("menu_settings"), t("guide_settings")),
+            ("04", t("menu_doctor"), t("guide_doctor")),
+        ]:
+            body = Text(label + "\n", style="bold")
+            body.append(hint, style=self.theme.muted)
+            steps.add_row(number, body)
+            steps.add_row("", "")
+        console.print(shell.panel(console, self.theme, steps, t("guide_title")))
+        console.print(Text(t("guide_output", path=str(
+            Path(self.cfg.output.folder).expanduser().resolve())), style=self.theme.accent))
+        console.print(Text(t("guide_resume"), style=self.theme.muted))
+        console.print(Text(shell.tr(
+            "↑↓ и Enter — выбор · Esc — назад · h — справка",
+            "↑↓ and Enter — select · Esc — back · h — guide",
+        ), style=self.theme.muted))
         self._wait_enter()
 
     def _offer_resume(self) -> None:
@@ -376,8 +377,16 @@ class MelodineTUI:
 
     def screen_search(self) -> None:
         self._screen(t("search_title"))
+        shell.heading(console, self.theme, shell.tr("Найди нужную версию", "Find the right version"),
+                      shell.tr("Исполнитель - Название или прямая ссылка YouTube.",
+                               "Artist - Title or a direct YouTube URL."))
+        console.print(Text(shell.tr("Пример: Muse - Hysteria", "Example: Muse - Hysteria"),
+                           style=self.theme.muted))
+        console.print(Text(shell.tr("Пустой Enter — назад", "Empty Enter — back"),
+                           style=self.theme.muted))
         query = Prompt.ask(
-            f"[{self.theme.primary}]{t('search_prompt')}[/]", default=""
+            Text("❯ " + t("search_prompt").rstrip(":"), style=self.theme.primary),
+            default="", show_default=False,
         ).strip()
         if not query:
             console.print(f"[{self.theme.warning}]{t('search_empty')}[/]")
@@ -398,14 +407,16 @@ class MelodineTUI:
 
         render_scored_results(scored, self.theme)
 
-        choice = IntPrompt.ask(
-            f"[{self.theme.primary}]{t('search_select')}[/]", default=1
+        visible = scored[:12]
+        choice = shell.select(
+            console, self.theme, t("search_select"),
+            [(str(i), f"{item.candidate.title} · {item.score}")
+             for i, item in enumerate(visible, 1)] + [("0", t("back"))],
+            default="1", show_rows=False,
         )
-        if choice <= 0:
+        if choice == "0":
             return
-        if choice > len(scored):
-            choice = 1
-        picked: ScoredCandidate = scored[choice - 1]
+        picked: ScoredCandidate = visible[int(choice) - 1]
         render_score_reasons(picked, self.theme)
 
         candidate = picked.candidate
@@ -416,7 +427,9 @@ class MelodineTUI:
             artist=candidate.channel,
             source="search",
         )
-        self._start_batch([task])
+        if Confirm.ask(shell.tr("Скачать выбранную версию?", "Download this version?"),
+                       default=True):
+            self._start_batch([task])
 
     # ------------------------------------------------------------------ #
     # playlist screen (v1 soul)
@@ -424,13 +437,18 @@ class MelodineTUI:
 
     def screen_playlist(self) -> None:
         self._screen(t("pl_title"))
-        path = Prompt.ask(
-            f"[{self.theme.primary}]{t('pl_filepath')}[/]", default=""
-        ).strip()
+        shell.heading(console, self.theme, shell.tr("Загрузка списком", "Batch download"),
+                      shell.tr("Один трек на строку в .txt. Можно вставить путь к файлу.",
+                               "One track per line in a .txt file. Paste its path."))
+        console.print(shell.panel(console, self.theme, Text(
+            "Daft Punk - Around the World\nMuse - Hysteria\nMassive Attack - Teardrop"
+        ), "playlist.txt"))
+        path = Prompt.ask(t("pl_filepath").rstrip(":"), default="", show_default=False).strip()
+        path = path.strip('"')
         if not path:
             return
         file_path = Path(path).expanduser()
-        if not file_path.exists():
+        if not file_path.is_file():
             console.print(f"[{self.theme.error}]{t('pl_file_not_found')}[/]")
             self._wait_enter()
             return
@@ -653,6 +671,9 @@ class MelodineTUI:
 
     def screen_doctor(self) -> None:
         self._screen(t("doctor_title"))
+        shell.heading(console, self.theme, shell.tr("Проверка системы", "System check"),
+                      shell.tr("FFmpeg, yt-dlp, база и внешние сервисы.",
+                               "FFmpeg, yt-dlp, database and external services."))
         results = run_checks(self.cfg, self.db)
         status_colors = {
             "ok": self.theme.success,
@@ -726,16 +747,21 @@ class MelodineTUI:
     def screen_settings(self) -> None:
         while True:
             self._screen(t("settings_title"))
-            lines = "\n".join(
-                f"  [{self.theme.accent}]\\[{key}][/]  {t(label)}"
-                for key, label in SETTINGS_ITEMS
-            )
-            console.print(
-                Panel(lines, border_style=self.theme.border, width=min(console.width, 76))
-            )
-            choice = Prompt.ask(
-                f"[{self.theme.primary}]{t('settings_prompt')}[/]", default="0"
-            ).strip().lower()
+            labels = dict(SETTINGS_ITEMS)
+            items = [
+                ("", shell.tr("ЗВУК И ЗАГРУЗКА", "AUDIO & DOWNLOAD")),
+                *[(k, t(labels[k])) for k in ("1", "2", "3", "4", "5", "6")],
+                ("", shell.tr("ИНТЕРФЕЙС", "APPEARANCE")),
+                *[(k, t(labels[k])) for k in ("7", "8")],
+                ("", shell.tr("КОНФИГУРАЦИЯ", "CONFIGURATION")),
+                *[(k, t(labels[k])) for k in ("9", "r", "0")],
+            ]
+            shell.status_grid(console, self.theme, [
+                (shell.tr("Формат", "Format"), self.cfg.audio.codec.upper()),
+                (t("theme_current"), self.theme.label),
+                ("Language / Язык", get_language().upper()),
+            ])
+            choice = shell.select(console, self.theme, t("settings_prompt"), items, default="0")
 
             handlers: dict[str, Any] = {
                 "1": self._settings_audio,
@@ -792,14 +818,22 @@ class MelodineTUI:
         self._screen(t("settings_audio"))
         codecs = list(CODEC_PRESETS)
         current = self.cfg.audio.codec
+        shell.heading(console, self.theme, shell.tr("Формат аудио", "Audio format"),
+                      shell.tr("Выбери баланс совместимости, размера и качества.",
+                               "Choose a balance of compatibility, size and quality."))
+        table = Table(box=box.SIMPLE, border_style=self.theme.border,
+                      show_header=False, width=shell.width(console))
+        table.add_column(width=10)
+        table.add_column(ratio=1)
         for i, key in enumerate(codecs, 1):
             marker = "▸" if key == current else " "
-            console.print(Text(f" {marker} {i}. {key.upper()} — {t(f'codec_help_{key}')}"))
-        console.print(Text(t("choice_hint"), style=self.theme.muted))
-        codec = Prompt.ask(
-            t("cfg_codec"),
-            choices=[str(i) for i in range(1, len(codecs) + 1)] + ["0"],
-            default=str(codecs.index(current) + 1),
+            table.add_row(Text(f"{marker} {i}. {key.upper()}", style=self.theme.accent),
+                          Text(t(f"codec_help_{key}")))
+        console.print(table)
+        codec = shell.select(
+            console, self.theme, t("cfg_codec"),
+            [(str(i), key.upper()) for i, key in enumerate(codecs, 1)] + [("0", t("back"))],
+            default=str(codecs.index(current) + 1), show_rows=False,
         )
         if codec == "0":
             return
@@ -842,6 +876,9 @@ class MelodineTUI:
 
     def _settings_search(self) -> None:
         self._screen(t("settings_search"))
+        shell.heading(console, self.theme, "Anti-MV", shell.tr(
+            "Приоритет официального аудио перед клипами и реакциями.",
+            "Prefer official audio over music videos and reactions."))
         self.cfg.search.anti_mv = Confirm.ask(t("cfg_anti_mv"), default=self.cfg.search.anti_mv)
         self.cfg.search.results = self._ask_int(
             t("cfg_results", v=self.cfg.search.results), self.cfg.search.results, 3, 30
@@ -856,6 +893,9 @@ class MelodineTUI:
 
     def _settings_sponsorblock(self) -> None:
         self._screen(t("settings_sponsorblock"))
+        shell.heading(console, self.theme, "SponsorBlock", shell.tr(
+            "Удаление размеченных немузыкальных вставок. Не все ролики имеют разметку.",
+            "Remove marked non-music segments. Not every video has markers."))
         self.cfg.sponsorblock.enabled = Confirm.ask(
             t("cfg_sb_enabled"), default=self.cfg.sponsorblock.enabled
         )
@@ -873,6 +913,9 @@ class MelodineTUI:
 
     def _settings_lyrics(self) -> None:
         self._screen(t("settings_lyrics"))
+        shell.heading(console, self.theme, "LRCLIB", shell.tr(
+            "Синхронизированные тексты и отдельные файлы .lrc.",
+            "Synchronized lyrics and separate .lrc files."))
         self.cfg.lyrics.enabled = Confirm.ask(t("cfg_ly_enabled"), default=self.cfg.lyrics.enabled)
         self.cfg.lyrics.synced = Confirm.ask(t("cfg_ly_synced"), default=self.cfg.lyrics.synced)
         self.cfg.lyrics.save_lrc = Confirm.ask(t("cfg_ly_lrc"), default=self.cfg.lyrics.save_lrc)
@@ -880,6 +923,9 @@ class MelodineTUI:
 
     def _settings_artwork(self) -> None:
         self._screen(t("settings_artwork"))
+        shell.heading(console, self.theme, shell.tr("Оформление треков", "Track details"),
+                      shell.tr("Обложки, альбомы и теги для локального плеера.",
+                               "Covers, albums and tags for your local player."))
         self.cfg.artwork.embed = Confirm.ask(t("cfg_aw_embed"), default=self.cfg.artwork.embed)
         self.cfg.artwork.crop = Confirm.ask(t("cfg_aw_crop"), default=self.cfg.artwork.crop)
         self.cfg.metadata.enrich = Confirm.ask(
@@ -903,24 +949,37 @@ class MelodineTUI:
         self._screen(t("settings_theme"))
         labels = list_themes()
         console.print(f"[{self.theme.muted}]{t('theme_current')}[/] {self.theme.label}\n")
+        table = Table.grid(padding=(0, 2), expand=True)
+        columns = 2 if shell.width(console) >= 64 else 1
+        for _ in range(columns):
+            table.add_column(ratio=1)
+        cells = []
         for i, (key, label) in enumerate(labels, 1):
             palette = get_theme(key)
             marker = "▸" if key == self.theme.name else " "
-            row = Text(f" {marker} {i:>2}. {label:<12} ")
+            row = Text(f"{marker} {i:>2}. {label:<12} ")
             for color in (palette.primary, palette.secondary, palette.accent,
                           palette.success, palette.warning, palette.error):
                 row.append("██ ", style=color)
-            console.print(row)
-        console.print(Text(t("choice_hint"), style=self.theme.muted))
+            cells.append(row)
+        for i in range(0, len(cells), columns):
+            table.add_row(*cells[i:i + columns])
+        console.print(shell.panel(console, self.theme, table,
+                                  shell.tr("Палитры", "Palettes")))
+        if console.legacy_windows:
+            console.print(Text(shell.tr(
+                "Классическая консоль: цвета приблизительные. Windows Terminal — полная палитра.",
+                "Classic console: approximate colors. Windows Terminal shows the full palette.",
+            ), style=self.theme.muted))
         default = self._theme_keys.index(self.theme.name) + 1
-        choice = Prompt.ask(
-            t("theme_select"),
-            choices=[str(i) for i in range(1, len(labels) + 1)] + ["0"],
-            default=str(default),
+        choice = shell.select(
+            console, self.theme, t("theme_select"),
+            [(str(i), label) for i, (_, label) in enumerate(labels, 1)] + [("0", t("back"))],
+            default=str(default), show_rows=False,
         )
         if choice != "0":
             self.cfg.theme = labels[int(choice) - 1][0]
-            self.theme = get_theme(self.cfg.theme)
+            self.theme = shell.display_theme(get_theme(self.cfg.theme), console)
             self._save()
             console.print(
                 f"[{self.theme.success}]{t('theme_changed', name=self.theme.label)}[/]"
@@ -961,7 +1020,7 @@ class MelodineTUI:
             from melodine.core.config import AppConfig
 
             self.cfg = AppConfig()
-            self.theme = get_theme(self.cfg.theme)
+            self.theme = shell.display_theme(get_theme(self.cfg.theme), console)
             set_language(self.cfg.language)
             self._save()
             console.print(f"[{self.theme.success}]{t('settings_reset_done')}[/]")
