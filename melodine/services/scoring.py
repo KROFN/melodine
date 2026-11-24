@@ -193,6 +193,19 @@ def score_candidate(
     channel_artist = _TOPIC_SUFFIX.sub("", candidate.channel)
     requested = _credits(target_artist)
     channel_key = _name_key(channel_artist)
+    # Many legitimate uploads omit the separator ("Artist Track").
+    # Strip an artist prefix only if the remaining whole title matches.
+    if not credited_artist and requested and target_title:
+        whole = _name_key(track_title)
+        target = _name_key(target_title)
+        for name in sorted(requested, key=len, reverse=True):
+            prefix = name + " "
+            if not whole.startswith(prefix):
+                continue
+            remainder = whole[len(prefix):]
+            if remainder == target or _cross_script_title_match(remainder, target):
+                credited_artist, track_title = name, remainder
+                break
     credits = _credits(credited_artist)
     channel_match = channel_key in requested
     credit_match = bool(requested & credits)

@@ -349,3 +349,17 @@ def test_title_gate_keeps_known_variants_and_featured_credits(title):
                              target_artist="Muse", target_title="Hysteria",
                              intent=IntentFlags(live=True))
     assert not any(r.key == "score_penalty_title_mismatch" for r in scored.reasons)
+
+def test_exact_artist_prefix_without_separator_is_a_valid_track():
+    result = score_candidate(candidate("Red Hot Chili Peppers Californication",
+                                       channel="Red Hot Chili Peppers"),
+                             target_artist="Red Hot Chili Peppers", target_title="Californication")
+    assert any(r.key == "score_reason_title_exact" for r in result.reasons)
+    assert not any(r.key == "score_penalty_title_mismatch" for r in result.reasons)
+
+
+def test_artist_prefix_does_not_hide_wrong_track():
+    result = score_candidate(candidate("Red Hot Chili Peppers Scar Tissue",
+                                       channel="Red Hot Chili Peppers"),
+                             target_artist="Red Hot Chili Peppers", target_title="Californication")
+    assert result.score == 0
