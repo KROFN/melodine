@@ -500,6 +500,7 @@ class DownloadService:
                     _emit("post", stage="convert")
 
             download_opts = self._build_ydl_opts(out_path, profile, bitrate, _hook)
+
             def _post_hook(data: dict[str, Any]) -> None:
                 _check_cancelled()
                 if data.get("status") == "started":
@@ -522,7 +523,6 @@ class DownloadService:
                 raise
             _check_cancelled()
             final_path = self._find_final_file(info, out_path)
-            _emit("post", stage="convert")
 
             # -- normalize ---------------------------------------------------
             _check_cancelled()
