@@ -9,6 +9,7 @@ Hotkeys: [t] cycle theme, [g] toggle RU/EN, [q] quit (graceful).
 from __future__ import annotations
 
 import contextlib
+import os
 import time
 from pathlib import Path
 from typing import Any
@@ -44,6 +45,8 @@ from melodine.ui.widgets import (
     render_stats,
 )
 from melodine.utils import parse_playlist
+
+IS_WINDOWS = os.name == "nt"
 
 MENU_ITEMS = [
     ("1", "menu_search"),
@@ -132,7 +135,14 @@ class MelodineTUI:
 
     def _clear_screen(self) -> None:
         """Redraw only interactive terminals; preserve redirected output."""
-        if console.is_terminal and not console.is_dumb_terminal:
+        if not console.is_terminal or console.is_dumb_terminal:
+            return
+        if IS_WINDOWS:
+            # Rich's legacy Win32 renderer handles HOME but not CLEAR:
+            # Console.clear() moves the cursor over the old screen contents.
+            # Use the native cls command, as Melodine v1 did.
+            os.system("cls")
+        else:
             console.clear()
 
     def _screen(self, title: str) -> None:
