@@ -29,8 +29,10 @@ from melodine.services.downloader import DownloadPool
 from melodine.services.exporter import Exporter
 from melodine.services.lrclib import LRCLIBClient, write_lrc_file
 from melodine.services.playlists import WatchlistService
+from melodine.services.scoring import detect_intent
 from melodine.services.search import SearchService
 from melodine.services.tagger import Tagger, is_audio_file
+from melodine.services.titles import parse_artist_title
 from melodine.ui import shell
 from melodine.ui.themes import Theme, get_theme, list_themes
 from melodine.ui.widgets import (
@@ -484,7 +486,10 @@ class MelodineTUI:
             return
 
         with console.status(f"[{self.theme.muted}]{t('search_searching')}[/]"):
-            _best, scored = self.search.best(query)
+            artist, title = parse_artist_title(query)
+            _best, scored = self.search.best(
+                query, target_artist=artist, target_title=title, intent=detect_intent(query)
+            )
         if not scored:
             console.print(f"[{self.theme.error}]{t('search_nothing')}[/]")
             self._wait_enter()
@@ -547,8 +552,6 @@ class MelodineTUI:
         console.print(f"[{self.theme.info}]{t('pl_found', n=len(tracks))}[/]")
         if not Confirm.ask(t("pl_confirm", n=len(tracks)), default=True):
             return
-
-        from melodine.services.scoring import detect_intent
 
         tasks = [
             DownloadTask(
