@@ -13,7 +13,7 @@ from rich.table import Table
 from rich.text import Text
 
 from melodine import __version__
-from melodine.i18n import get_language, t
+from melodine.i18n import get_language
 
 if TYPE_CHECKING:
     from rich.console import Console
@@ -128,7 +128,9 @@ def select(
     if not keyboard_available(console):
         if show_rows:
             choice_rows(console, theme, items)
-        return Prompt.ask(message, choices=list(valid), default=default, show_choices=False)
+        keys = list(valid) + (["q"] if "0" in valid and "q" not in valid else [])
+        answer = Prompt.ask(message, choices=keys, default=default, show_choices=not show_rows)
+        return "0" if answer == "q" and "q" not in valid else answer
 
     from InquirerPy import inquirer
     from InquirerPy.separator import Separator
@@ -146,7 +148,7 @@ def select(
         style=get_style({"pointer": color, "question": "bold", "questionmark": color,
                          "answer": color, "instruction": "ansigray",
                          "selected": f"{color} bold", "separator": "ansigray"}),
-        max_height="75%", show_cursor=False,
+        max_height="55%", show_cursor=False,
     )
 
     def bind(shortcut: str, value: str) -> None:
@@ -157,7 +159,7 @@ def select(
             event.app.exit(result=value)
 
     for key in valid:
-        if len(key) == 1:
+        if len(key) == 1 and not any(other != key and other.startswith(key) for other in valid):
             bind(key, key)
     if "0" in valid:
         bind("escape", "0")
