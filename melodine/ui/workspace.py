@@ -1,7 +1,8 @@
-"""Full-screen workspace navigation using prompt_toolkit's native drivers."""
+"""Compact workspace navigation for modern terminals."""
 
 from __future__ import annotations
 
+from functools import lru_cache
 from typing import TYPE_CHECKING
 
 from prompt_toolkit.application import Application, get_app
@@ -77,23 +78,30 @@ def workspace_select(
     if "q" not in valid:
         bind("q", "0")
 
+    def workspace_width():
+        return min(88, get_app().output.get_size().columns)
+
     def menu_width():
-        cols = get_app().output.get_size().columns
-        return min(46, max(40 if previews else 34, cols * 2 // 5)) if cols >= 82 else cols
+        cols = workspace_width()
+        return 42 if cols >= 82 and previews else 38 if cols >= 82 else cols
+
+    def workspace_height():
+        rows = get_app().output.get_size().rows
+        return max(3, min(max(15, len(items) + 5), 22, rows - 2))
 
     def menu_text():
         fragments = []
         for i, (key, label) in enumerate(items):
             if not key:
-                fragments.append(("class:group", f"  {label}\n"))
+                fragments.append(("class:melodine-group", f"  {label}\n"))
                 continue
             selected = i == current
             line = f" {'❯' if selected else ' '} {key:>2}  {label}"
-            row_style = "class:selected" if selected else "class:menu"
+            row_style = "class:melodine-selected" if selected else "class:melodine-menu"
             if previews and key in previews:
                 fragments.append((row_style, line.ljust(21)))
                 for i in range(6):
-                    fragments.append((f"class:swatch-{key}-{i}", "  "))
+                    fragments.append((f"class:melodine-swatch-{key}-{i}", "  "))
                     fragments.append((row_style, " "))
                 fragments.append((row_style, " " * max(0, menu_width() - 41) + "\n"))
             else:
@@ -103,40 +111,41 @@ def workspace_select(
     def detail_text():
         key, label = items[current]
         fragments = [
-            ("class:muted", f"  {tr('ВЫБРАНО', 'SELECTED')}  /  {key.upper()}\n\n"),
-            ("class:heading", f"  {label}\n\n"),
-            ("class:body", f"  {details.get(key, '')}\n\n"),
+            ("class:melodine-muted", f"  {tr('ВЫБРАНО', 'SELECTED')}  /  {key.upper()}\n\n"),
+            ("class:melodine-heading", f"  {label}\n\n"),
+            ("class:melodine-body", f"  {details.get(key, '')}\n\n"),
         ]
         if previews and key in previews:
             fragments.extend([
-                ("class:heading", f"  {tr('ПРЕДПРОСМОТР', 'PREVIEW')}\n\n"),
-                ("class:success", f"  ✓ {tr('Трек загружен', 'Track downloaded')}\n"),
-                ("class:warning", f"  ! {tr('Проверка источника', 'Checking source')}\n"),
-                ("class:error", f"  × {tr('Ошибка соединения', 'Connection failed')}\n\n"),
-                ("class:value", "  ━━━━━━━━━━━━━━━  75%\n\n"),
-                ("class:muted", tr("  Enter — применить, Esc — отменить.\n",
+                ("class:melodine-heading", f"  {tr('ПРЕДПРОСМОТР', 'PREVIEW')}\n\n"),
+                ("class:melodine-success", f"  ✓ {tr('Трек загружен', 'Track downloaded')}\n"),
+                ("class:melodine-warning", f"  ! {tr('Проверка источника', 'Checking source')}\n"),
+                ("class:melodine-error", f"  × {tr('Ошибка соединения', 'Connection failed')}\n\n"),
+                ("class:melodine-value", "  ━━━━━━━━━━━━━━━  75%\n\n"),
+                ("class:melodine-muted", tr("  Enter — применить, Esc — отменить.\n",
                                    "  Enter — apply, Esc — cancel.\n")),
             ])
             return fragments
-        fragments.append(("class:muted", f"  {tr('СОСТОЯНИЕ', 'STATUS')}\n"))
+        fragments.append(("class:melodine-muted", f"  {tr('СОСТОЯНИЕ', 'STATUS')}\n\n"))
         for name, value in status:
-            fragments.extend([("class:muted", f"  {name}\n"),
-                              ("class:value", f"  {value}\n\n")])
+            fragments.extend([("class:melodine-muted", f"  {name.rstrip(':')}: "),
+                              ("class:melodine-value", f"{value}\n")])
         if context:
-            fragments.extend([("class:muted", f"  {tr('ПАПКА МУЗЫКИ', 'MUSIC FOLDER')}\n"),
-                              ("class:value", f"  {context}\n")])
+            fragments.append(("", "\n"))
+            fragments.extend([("class:melodine-muted", f"  {tr('ПАПКА МУЗЫКИ', 'MUSIC FOLDER')}\n"),
+                              ("class:melodine-value", f"  {context}\n")])
         return fragments
 
     def compact_text():
         key, _ = items[current]
-        return [("class:muted", "  " + details.get(key, ""))]
+        return [("class:melodine-muted", "  " + details.get(key, ""))]
 
     menu_control = FormattedTextControl(
         menu_text, focusable=True, show_cursor=False,
         get_cursor_position=lambda: Point(x=0, y=current),
     )
     menu = Window(menu_control, always_hide_cursor=True)
-    wide = Condition(lambda: get_app().output.get_size().columns >= 82)
+    wide = Condition(lambda: workspace_width() >= 82)
     tall = Condition(lambda: get_app().output.get_size().rows >= 18)
     # ConditionalContainers avoid duplicate focusable controls on small screens.
     left = Frame(menu, title=tr("Навигация", "Navigation"),
@@ -147,72 +156,67 @@ def workspace_select(
         filter=wide,
     )
     header = Window(FormattedTextControl([
-        ("class:brand", " MELODINE "),
-        ("class:heading", f"  /  {title}"),
-        ("class:muted", f"  v{__version__}"),
+        ("class:melodine-brand", " MELODINE "),
+        ("class:melodine-heading", f"  /  {title}"),
+        ("class:melodine-muted", f"  v{__version__}"),
     ]), height=1)
     footer = Window(FormattedTextControl([
-        ("class:heading", " ↑↓ "),
-        ("class:body", tr("выбор ", "move ")),
-        ("class:heading", " Enter "),
-        ("class:body", tr("открыть ", "open ")),
-        ("class:heading", " Esc "),
-        ("class:body", tr("назад ", "back ")),
-        ("class:heading", " 0–9 " if not previews else ""),
-        ("class:body", tr("команды ", "actions ") if not previews else ""),
-        ("class:heading", " q "),
-        ("class:body", tr("выход", "back/quit")),
+        ("class:melodine-heading", " ↑↓ "),
+        ("class:melodine-body", tr("выбор ", "move ")),
+        ("class:melodine-heading", " Enter "),
+        ("class:melodine-body", tr("открыть ", "open ")),
+        ("class:melodine-heading", " Esc "),
+        ("class:melodine-body", tr("назад ", "back ")),
+        ("class:melodine-heading", " 0–9 " if not previews else ""),
+        ("class:melodine-body", tr("команды ", "actions ") if not previews else ""),
+        ("class:melodine-heading", " q "),
+        ("class:melodine-body", tr("выход", "back/quit")),
     ]), height=1)
     root = HSplit([
         header,
-        Window(height=1, char="─", style="class:group"),
+        Window(height=1, char="─", style="class:melodine-group"),
         VSplit([left, right], padding=1),
         ConditionalContainer(
             Window(FormattedTextControl(compact_text), wrap_lines=True, height=3),
             filter=~wide & tall,
         ),
         footer,
-    ])
+    ], width=lambda: Dimension.exact(workspace_width()),
+       height=lambda: Dimension.exact(workspace_height()))
+    @lru_cache(maxsize=16)
     def style_for(active: Theme) -> Style:
-        # prompt_toolkit translates ANSI styles through its Win32 output driver.
+        # Do not paint the terminal background or inherit built-in menu/reverse
+        # styles. Only the focused item and semantic status text carry color.
         if console.legacy_windows:
             active = display_theme(active, console)
-            accent = {
-                "bright_magenta": "ansibrightmagenta", "bright_blue": "ansibrightblue",
-                "bright_green": "ansibrightgreen", "bright_yellow": "ansibrightyellow",
-            }.get(active.primary, "ansibrightcyan")
-            muted, background, foreground = "ansiwhite", "ansiblack", "ansiwhite"
-            success, warning, error = "ansibrightgreen", "ansibrightyellow", "ansibrightred"
-            selected = f"bg:{accent} ansiblack bold"
+            accent = {"green": "ansigreen", "yellow": "ansiyellow",
+                      "magenta": "ansimagenta"}.get(active.accent, "ansicyan")
+            muted, foreground = "ansiwhite", "ansiwhite"
+            success, warning, error = "ansigreen", "ansiyellow", "ansired"
         else:
             accent = active.primary
-            muted, background, foreground = "#a8aec0", "#14161e", "#e4e6ef"
-            if active.light:
-                muted, background, foreground = "#4b5563", "#f6f4ef", "#21242c"
+            muted, foreground = "ansigray", "default"
             success, warning, error = active.success, active.warning, active.error
-            selected = f"bg:{accent} #101118 bold"
-            if active.light:
-                selected = f"bg:{accent} #ffffff bold"
         styles = {
-            "": f"bg:{background} {foreground}",
-            "brand": selected,
-            "heading": f"{accent} bold",
-            "group": f"{muted} bold",
-            "muted": muted,
-            "body": foreground,
-            "menu": foreground,
-            "selected": selected,
-            "value": f"{accent} bold",
-            "success": success,
-            "warning": warning,
-            "error": error,
+            "": "",
+            "melodine-brand": f"{accent} bold",
+            "melodine-heading": f"{accent} bold",
+            "melodine-group": f"{muted} bold",
+            "melodine-muted": muted,
+            "melodine-body": foreground,
+            "melodine-menu": foreground,
+            "melodine-selected": f"{accent} bold",
+            "melodine-value": f"{accent} bold",
+            "melodine-success": success,
+            "melodine-warning": warning,
+            "melodine-error": error,
             "frame.border": muted,
             "frame.label": f"{accent} bold",
         }
         for key, palette in (previews or {}).items():
             for i, color in enumerate((palette.primary, palette.secondary, palette.accent,
                                        palette.success, palette.warning, palette.error)):
-                styles[f"swatch-{key}-{i}"] = f"bg:{color}"
+                styles[f"melodine-swatch-{key}-{i}"] = f"bg:{color}"
         return Style.from_dict(styles)
 
     style = DynamicStyle(
@@ -220,5 +224,5 @@ def workspace_select(
     )
     return Application(
         layout=Layout(root, focused_element=menu_control), key_bindings=bindings,
-        style=style, full_screen=True, mouse_support=False,
+        style=style, full_screen=False, erase_when_done=True, mouse_support=False,
     ).run()
