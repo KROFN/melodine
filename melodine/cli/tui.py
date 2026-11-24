@@ -1039,7 +1039,7 @@ class MelodineTUI:
                     " Approximate colors: classic Windows console.",
                 )
             choice = workspace_select(
-                console, self.theme, t("settings_theme"), items + [("0", t("back"))],
+                console, self.theme, t("settings_theme"), [*items, ("0", t("back"))],
                 {key: hint for key, _ in items}, [], default=str(default),
                 previews=previews,
             )
@@ -1067,7 +1067,8 @@ class MelodineTUI:
                                       shell.tr("Палитры", "Palettes")))
             if console.legacy_windows:
                 console.print(Text(shell.tr(
-                    "Классическая консоль: цвета приблизительные. Windows Terminal — полная палитра.",
+                    "Классическая консоль: цвета приблизительные. "
+                    "Windows Terminal — полная палитра.",
                     "Classic console: approximate colors. Windows Terminal shows the full palette.",
                 ), style=self.theme.muted))
             choice = shell.select(
