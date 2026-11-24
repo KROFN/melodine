@@ -200,11 +200,7 @@ class DownloadService:
                 }
             )
 
-        quality: str | None
-        if profile.lossless:
-            quality = None
-        else:
-            quality = str(bitrate) if bitrate else profile.yt_quality
+        quality = None if profile.lossless else str(bitrate) if bitrate else profile.yt_quality
 
         # FFmpegExtractAudio and ModifyChapters both run in the default
         # 'post_process' phase, in list order - exactly like the upstream
