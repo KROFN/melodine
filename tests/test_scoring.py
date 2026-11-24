@@ -313,3 +313,13 @@ def test_saturated_scores_keep_stronger_evidence_first():
     ranked = rank_candidates([weak, strong], target_artist="Muse", target_title="Hysteria")
     assert ranked[0].score == ranked[1].score == 100
     assert ranked[0].candidate is strong
+
+
+def test_unrelated_official_audio_claim_cannot_beat_matching_verified_source():
+    official = SearchCandidate(title="Muse - Hysteria", channel="Muse",
+                               channel_is_verified=True)
+    repost = SearchCandidate(title="Muse - Hysteria (Official Audio)",
+                             channel="Music Reviewer", channel_is_verified=True)
+    ranked = rank_candidates([repost, official], target_artist="Muse", target_title="Hysteria")
+    assert ranked[0].candidate is official
+    assert any(r.key == "score_reason_audio_claim" for r in ranked[1].reasons)
