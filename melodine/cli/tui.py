@@ -376,9 +376,6 @@ class MelodineTUI:
             steps.add_row(number, body)
             steps.add_row("", "")
         console.print(shell.panel(console, self.theme, steps, t("guide_title")))
-        console.print(Text(t("guide_output", path=str(
-            Path(self.cfg.output.folder).expanduser().resolve())), style=self.theme.accent))
-        console.print(Text(t("guide_resume"), style=self.theme.muted))
         console.print()
         notice = shell.panel(console, self.theme, Text(t("guide_network")),
                              shell.tr("Доступ к YouTube", "YouTube connectivity"))
@@ -387,6 +384,13 @@ class MelodineTUI:
         notice.border_style = self.theme.warning
         console.print(notice)
         console.print()
+        folder = Path(self.cfg.output.folder).expanduser().resolve()
+        console.print(Text(shell.tr("Папка музыки", "Music folder"), style="bold"))
+        console.print(Text("  ↳ ", style=self.theme.muted) + Text(str(folder)),
+                      width=shell.width(console))
+        console.print()
+        console.print(Text(t("guide_resume"), style=self.theme.muted),
+                      width=shell.width(console))
         console.print(Text(shell.tr(
             "↑↓ и Enter — выбор · Esc — назад · h — справка",
             "↑↓ and Enter — select · Esc — back · h — guide",
