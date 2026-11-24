@@ -92,6 +92,8 @@ class MelodineTUI:
         self.pool: DownloadPool | None = None
         self.bridge: ProgressBridge | None = None
         self._theme_keys = [key for key, _label in list_themes()]
+        self._home_selection = "1"
+        self._settings_selection = "1"
 
     # ------------------------------------------------------------------ #
     # lifecycle
@@ -188,11 +190,56 @@ class MelodineTUI:
 
     def _main_menu(self) -> bool:
         """One menu iteration; returns False to exit."""
-        self._draw_dashboard()
-        choice = shell.select(
-            console, self.theme, t("menu_prompt"), self._menu_items(),
-            default="1", show_rows=False,
-        )
+        if shell.keyboard_available(console):
+            from melodine.ui.workspace import workspace_select
+
+            stats = self.db.get_stats()
+            tr = shell.tr
+            details = {
+                "1": tr("Найди трек, сравни версии и скачай подходящую.",
+                        "Find a track, compare versions and download the right one."),
+                "2": tr("Импорт списка треков из текстового файла.",
+                        "Import a track list from a text file."),
+                "3": tr("Прогресс, скорость и состояние загрузок.",
+                        "Download progress, speed and status."),
+                "4": tr("Скачанные треки, история и статистика.",
+                        "Downloaded tracks, history and statistics."),
+                "5": tr("Отслеживай обновления плейлистов и каналов.",
+                        "Track playlist and channel updates."),
+                "6": tr("Найди и добавь тексты в существующие аудиофайлы.",
+                        "Find and add lyrics to existing audio files."),
+                "7": tr("Проверь FFmpeg, yt-dlp и доступность сервисов.",
+                        "Check FFmpeg, yt-dlp and service connectivity."),
+                "8": tr("Экспортируй медиатеку в M3U8 или JSON.",
+                        "Export your library to M3U8 or JSON."),
+                "9": tr("Формат аудио, качество, поиск, папки и оформление.",
+                        "Audio format, quality, search, folders and appearance."),
+                "h": tr("Короткое руководство и примеры использования.",
+                        "Quick guide and examples."),
+                "t": tr("Выбери одну из 12 цветовых палитр.",
+                        "Choose one of 12 color palettes."),
+                "g": tr("Переключи язык интерфейса.", "Switch the interface language."),
+                "0": tr("Закрыть приложение.", "Close the application."),
+            }
+            codec = self.cfg.audio.codec.upper()
+            if codec != "FLAC":
+                codec += f" · {self.cfg.audio.bitrate} kbps"
+            choice = workspace_select(
+                console, self.theme, tr("Главная", "Home"), self._menu_items(), details,
+                [(tr("Треков в медиатеке", "Library tracks"), str(self.db.count_tracks())),
+                 (t("stats_success"), str(stats["success"])),
+                 (tr("Формат аудио", "Audio format"), codec),
+                 (tr("Оформление", "Appearance"), self.theme.label + " · " + get_language().upper())],
+                default=self._home_selection, context=str(
+                    Path(self.cfg.output.folder).expanduser().resolve()),
+            )
+        else:
+            self._draw_dashboard()
+            choice = shell.select(
+                console, self.theme, t("menu_prompt"), self._menu_items(),
+                default=self._home_selection, show_rows=False,
+            )
+        self._home_selection = choice
 
         if choice in {"q", "quit", "exit", "0"}:
             return False
@@ -746,7 +793,6 @@ class MelodineTUI:
 
     def screen_settings(self) -> None:
         while True:
-            self._screen(t("settings_title"))
             labels = dict(SETTINGS_ITEMS)
             items = [
                 ("", shell.tr("ЗВУК И ЗАГРУЗКА", "AUDIO & DOWNLOAD")),
@@ -756,12 +802,41 @@ class MelodineTUI:
                 ("", shell.tr("КОНФИГУРАЦИЯ", "CONFIGURATION")),
                 *[(k, t(labels[k])) for k in ("9", "r", "0")],
             ]
-            shell.status_grid(console, self.theme, [
+            status = [
                 (shell.tr("Формат", "Format"), self.cfg.audio.codec.upper()),
                 (t("theme_current"), self.theme.label),
                 ("Language / Язык", get_language().upper()),
-            ])
-            choice = shell.select(console, self.theme, t("settings_prompt"), items, default="0")
+            ]
+            if shell.keyboard_available(console):
+                from melodine.ui.workspace import workspace_select
+
+                tr = shell.tr
+                details = {
+                    "1": tr("Кодек, битрейт, громкость и параметры загрузки.",
+                            "Codec, bitrate, loudness and download settings."),
+                    "2": tr("Правила выбора подходящего аудио.", "Audio selection rules."),
+                    "3": tr("Удаление размеченных немузыкальных сегментов.",
+                            "Remove marked non-music segments."),
+                    "4": tr("Встроенные тексты и файлы .lrc.", "Embedded lyrics and .lrc files."),
+                    "5": tr("Обложки, альбомы и теги.", "Artwork, albums and tags."),
+                    "6": tr("Папка локальной медиатеки.", "Local library folder."),
+                    "7": tr("Цветовые палитры интерфейса.", "Interface color palettes."),
+                    "8": tr("Русский или английский.", "Russian or English."),
+                    "9": tr("Текущие значения настроек.", "Current configuration values."),
+                    "r": tr("Вернуть настройки по умолчанию.", "Restore default settings."),
+                    "0": tr("Вернуться на главную.", "Return home."),
+                }
+                choice = workspace_select(
+                    console, self.theme, t("settings_title"), items, details, status,
+                    default=self._settings_selection,
+                )
+            else:
+                self._screen(t("settings_title"))
+                shell.status_grid(console, self.theme, status)
+                choice = shell.select(
+                    console, self.theme, t("settings_prompt"), items, default="0",
+                )
+            self._settings_selection = choice
 
             handlers: dict[str, Any] = {
                 "1": self._settings_audio,
