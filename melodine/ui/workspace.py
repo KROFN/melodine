@@ -183,6 +183,10 @@ def workspace_select(
         footer,
     ], width=lambda: Dimension.exact(workspace_width()),
        height=lambda: Dimension.exact(workspace_height()))
+    # The renderer gives its root the entire terminal width; a parent split
+    # must allocate the bounded workspace before laying it out.
+    canvas = VSplit([root, Window(width=Dimension(min=0, weight=1))])
+
     @lru_cache(maxsize=16)
     def style_for(active: Theme) -> Style:
         # Do not paint the terminal background or inherit built-in menu/reverse
@@ -223,6 +227,6 @@ def workspace_select(
         lambda: style_for((previews or {}).get(items[current][0], theme))
     )
     return Application(
-        layout=Layout(root, focused_element=menu_control), key_bindings=bindings,
+        layout=Layout(canvas, focused_element=menu_control), key_bindings=bindings,
         style=style, full_screen=False, erase_when_done=True, mouse_support=False,
     ).run()
