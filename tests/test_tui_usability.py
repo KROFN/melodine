@@ -333,3 +333,17 @@ def test_progress_distinguishes_transfer_and_processing(ui):
     bridge("done", task, {"result": DownloadResult(task=task, status="success")})
     assert progress.tasks[0].fields["phase"] == "done"
     assert progress.tasks[0].finished
+
+
+@pytest.mark.parametrize(("lang", "heading"), [
+    ("ru", "Доступ к YouTube"), ("en", "YouTube connectivity"),
+])
+def test_guide_network_notice_is_bounded(ui, monkeypatch, lang, heading):
+    app, output = ui
+    set_language(lang)
+    monkeypatch.setattr(app, "_wait_enter", lambda: None)
+    app.screen_guide()
+    lines = output.getvalue().splitlines()
+    title_line = next(line for line in lines if heading in line)
+    assert "╭" in title_line and "╮" in title_line
+    assert all(len(line) <= 88 for line in lines if "YouTube" in line)
