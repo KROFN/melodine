@@ -9,6 +9,7 @@ explicitly asked for that variant.
 from __future__ import annotations
 
 import re
+import unicodedata
 
 from melodine.models import (
     IntentFlags,
@@ -20,6 +21,44 @@ from melodine.services.titles import clean_track_title, parse_artist_title, toke
 
 # Base score every candidate starts from.
 BASE_SCORE = 50
+
+# Artist identity: compare whole normalized names, never substring matches.
+_TOPIC_SUFFIX = re.compile(r"\s*[-–—]\s*topic\s*$", re.IGNORECASE)
+_CREDIT_SPLIT = re.compile(r"\s*(?:[&,/]|\s+(?:feat\.?|ft\.?|featuring|и|x|×)\s+)\s*", re.I)
+_UPLOAD_SUFFIX = re.compile(r"\s*\(слив\s+(?:трека|клипа)(?:\s*,\s*\d{4})?\)\s*$", re.I)
+_CYRILLIC = dict(zip("абвгдежзийклмнопрстуфхцчшщъыьэюя",
+    ("a", "b", "v", "g", "d", "e", "zh", "z", "i", "i", "k", "l", "m", "n",
+     "o", "p", "r", "s", "t", "u", "f", "kh", "ts", "ch", "sh", "shch", "",
+     "y", "", "e", "yu", "ya"), strict=True))
+_CYRILLIC["ё"] = "e"
+
+
+def _name_key(value: str) -> str:
+    value = unicodedata.normalize("NFKC", value).casefold()
+    return " ".join(re.findall(r"[^\W_]+", value))
+
+
+def _credits(value: str) -> set[str]:
+    names = {_name_key(part) for part in _CREDIT_SPLIT.split(value)}
+    names.add(_name_key(value))
+    return names - {""}
+
+
+def _title_phonetic_key(value: str) -> str:
+    # A deliberately narrow cross-script fallback, not an identity check.
+    value = "".join(_CYRILLIC.get(ch, ch) for ch in _name_key(value))
+    value = re.sub(r"c(?=[eiy])", "s", value).replace("c", "k")
+    return re.sub(r"(.)\1+", r"\1", value)
+
+
+def _cross_script_title_match(a: str, b: str) -> bool:
+    a, b = _name_key(a), _name_key(b)
+    if not a or not b or max(len(a), len(b)) < 4:
+        return False
+    if bool(re.search(r"[а-яё]", a)) == bool(re.search(r"[а-яё]", b)):
+        return False
+    return _title_phonetic_key(a) == _title_phonetic_key(b)
+
 
 # --------------------------------------------------------------------------- #
 # Intent detection
@@ -119,9 +158,24 @@ def score_candidate(
         score += points
         reasons.append(ScoreReason(key=key, points=points, value=value))
 
+    credited_artist, track_title = parse_artist_title(clean_track_title(candidate.title).title)
+    track_title = _UPLOAD_SUFFIX.sub("", track_title)
+    channel_artist = _TOPIC_SUFFIX.sub("", candidate.channel)
+    requested = _credits(target_artist)
+    channel_match = bool(requested & _credits(channel_artist))
+    credit_match = bool(requested & _credits(credited_artist))
+    title_match = bool(target_title) and (
+        _name_key(track_title) == _name_key(target_title)
+        or _cross_script_title_match(track_title, target_title)
+    )
+    if channel_match or credit_match:
+        _add("score_reason_artist_match", 20)
+    if candidate.channel_is_verified is True and channel_match and title_match:
+        _add("score_reason_verified_artist", 15)
+
     # -- positive signals (studio audio) --------------------------------------
     if penalize:
-        if candidate.channel.strip().lower().endswith("- topic"):
+        if _TOPIC_SUFFIX.search(candidate.channel) and (not requested or channel_match):
             _add("score_reason_topic", 40)
         if _B_OFFICIAL_AUDIO.search(text):
             _add("score_reason_official_audio", 25)
@@ -142,10 +196,11 @@ def score_candidate(
 
     # -- title similarity ------------------------------------------------------
     if target_title:
-        cleaned = clean_track_title(candidate.title).title
-        _, cleaned = parse_artist_title(cleaned)
-        if cleaned.lower() == target_title.strip().lower():
+        cleaned = track_title
+        if _name_key(cleaned) == _name_key(target_title):
             _add("score_reason_title_exact", 12)
+        elif _cross_script_title_match(cleaned, target_title):
+            _add("score_reason_title_transliterated", 10)
         else:
             similarity = token_similarity(cleaned, target_title)
             if similarity >= 0.5:
@@ -211,6 +266,10 @@ def score_candidate(
     return ScoredCandidate(candidate=candidate, score=final, reasons=reasons)
 
 
+def ranking_key(item: ScoredCandidate) -> tuple[int, int]:
+    return item.score, sum(reason.points for reason in item.reasons)
+
+
 def rank_candidates(
     candidates: list[SearchCandidate],
     **kwargs: object,
@@ -220,5 +279,5 @@ def rank_candidates(
         score_candidate(candidate, **kwargs)  # type: ignore[arg-type]
         for candidate in candidates
     ]
-    scored.sort(key=lambda item: item.score, reverse=True)
+    scored.sort(key=ranking_key, reverse=True)
     return scored
