@@ -16,7 +16,7 @@ from melodine.models import (
     ScoreReason,
     SearchCandidate,
 )
-from melodine.services.titles import clean_track_title, token_similarity
+from melodine.services.titles import clean_track_title, parse_artist_title, token_similarity
 
 # Base score every candidate starts from.
 BASE_SCORE = 50
@@ -58,7 +58,7 @@ def detect_intent(text: str) -> IntentFlags:
 # --------------------------------------------------------------------------- #
 
 _P_MUSIC_VIDEO = re.compile(
-    r"(official\s+music\s+video|music\s+video|videoclip|официальн\w+\s+клип|\bклип\b"
+    r"(official\s+music\s+video|music\s+video|videoclip|официальн\w+\s+клип|\bклип(?:а|у|ом|е|ы|ов|ам|ами|ах)?\b"
     r"|\bmv\b|m/v)",
     re.IGNORECASE,
 )
@@ -143,6 +143,7 @@ def score_candidate(
     # -- title similarity ------------------------------------------------------
     if target_title:
         cleaned = clean_track_title(candidate.title).title
+        _, cleaned = parse_artist_title(cleaned)
         if cleaned.lower() == target_title.strip().lower():
             _add("score_reason_title_exact", 12)
         else:
