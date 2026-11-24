@@ -84,10 +84,10 @@ def build_progress(theme: Theme) -> Progress:
     return Progress(
         SpinnerColumn(style=theme.primary),
         TextColumn("{task.description}", markup=False),
-        BarColumn(
+        TransferOnlyColumn(BarColumn(
             complete_style=theme.bar_complete,
             finished_style=theme.success,
-        ),
+        )),
         TransferOnlyColumn(DownloadColumn()),
         TransferOnlyColumn(TransferSpeedColumn()),
         TransferOnlyColumn(TimeRemainingColumn()),
@@ -313,10 +313,10 @@ class ProgressBridge:
                 elif event == "post" and task.task_id in self._tasks:
                     stage = str(payload.get("stage") or "")
                     label = self._labels.get(task.task_id, "")
-                    self.progress.update(
+                    self.progress.reset(
                         self._tasks[task.task_id],
                         description=f"{label} · {t('stage_' + stage)}",
-                        total=None, completed=0, phase="processing",
+                        total=1, completed=0, phase="processing",
                     )
                 elif event == "done" and task.task_id in self._tasks:
                     result = payload.get("result")
