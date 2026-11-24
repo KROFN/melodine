@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import pytest
+
 from melodine.models import IntentFlags, SearchCandidate
 from melodine.services.scoring import detect_intent, rank_candidates, score_candidate
 
@@ -241,3 +243,73 @@ def test_cadillac_track_upload_beats_video_without_penalizing_leak_word():
     assert ranked[0].candidate == audio
     assert not any(r.points < 0 for r in ranked[0].reasons)
     assert any(r.key == "score_penalty_music_video" for r in ranked[1].reasons)
+
+
+@pytest.mark.parametrize(("value", "expected"), [
+    (True, True), (False, False), (None, None), ("true", None),
+])
+def test_verification_metadata(value, expected):
+    item = SearchCandidate.from_ytdlp({
+        "id": "abc", "channel": "Muse", "channel_id": "UCabc",
+        "channel_is_verified": value,
+    })
+    assert item.channel_id == "UCabc"
+    assert item.channel_is_verified is expected
+    assert SearchCandidate.from_ytdlp({}).channel_is_verified is None
+
+
+def test_verified_artist_matches_but_unrelated_verified_channel_does_not():
+    official = SearchCandidate(title="Muse - Hysteria", channel="Muse",
+                               channel_is_verified=True)
+    repost = SearchCandidate(title="Muse - Hysteria", channel="Muse & News",
+                             channel_is_verified=True)
+    other = SearchCandidate(title="Muse - Hysteria", channel="Music Reviewer",
+                            channel_is_verified=True)
+    ranked = rank_candidates([other, repost, official],
+                             target_artist="Muse", target_title="Hysteria")
+    assert ranked[0].candidate is official
+    assert any(r.key == "score_reason_verified_artist" for r in ranked[0].reasons)
+    for item in ranked[1:]:
+        assert not any(r.key == "score_reason_verified_artist" for r in item.reasons)
+
+
+def test_verified_wrong_song_does_not_get_verification_bonus():
+    scored = score_candidate(SearchCandidate(title="Muse - Starlight", channel="Muse",
+                                              channel_is_verified=True),
+                             target_artist="Muse", target_title="Hysteria")
+    assert not any(r.key == "score_reason_verified_artist" for r in scored.reasons)
+
+
+def test_cadillac_verified_artist_typo_and_transliterated_title():
+    audio = SearchCandidate(title="Элджей & MORGENSHTERN - Cadillac (СЛИВ ТРЕКА, 2020)",
+                            channel="MORGENSHTERN", channel_is_verified=True)
+    video = SearchCandidate(title="MORGENSHTERN & Элджей - Cadillac (СЛИВ КЛИПА, 2020)",
+                            channel="MORGENSHTERN", channel_is_verified=True)
+    ranked = rank_candidates([video, audio], target_artist="morgenstern", target_title="кадиллак")
+    assert [x.score for x in ranked] == [95, 60]
+    assert ranked[0].candidate is audio
+    assert {r.key for r in ranked[0].reasons} >= {
+        "score_reason_verified_artist", "score_reason_artist_match",
+        "score_reason_title_transliterated",
+    }
+
+
+def test_typo_requires_corroborating_credit():
+    scored = score_candidate(SearchCandidate(title="Cadillac", channel="MORGENSHTERN",
+                                              channel_is_verified=True),
+                             target_artist="morgenstern", target_title="кадиллак")
+    assert not any(r.key == "score_reason_verified_artist" for r in scored.reasons)
+
+
+def test_unrelated_topic_no_bonus():
+    scored = score_candidate(candidate("Hysteria", channel="Unknown - Topic"),
+                             target_artist="Muse", target_title="Hysteria")
+    assert not any(r.key == "score_reason_topic" for r in scored.reasons)
+
+
+def test_saturated_scores_keep_stronger_evidence_first():
+    weak = SearchCandidate(title="Muse - Hysteria (Official Audio)", channel="Muse")
+    strong = SearchCandidate(title=weak.title, channel="Muse", channel_is_verified=True)
+    ranked = rank_candidates([weak, strong], target_artist="Muse", target_title="Hysteria")
+    assert ranked[0].score == ranked[1].score == 100
+    assert ranked[0].candidate is strong
