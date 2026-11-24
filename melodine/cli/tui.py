@@ -17,12 +17,13 @@ from rich import box
 from rich.panel import Panel
 from rich.prompt import Confirm, IntPrompt, Prompt
 from rich.table import Table
+from rich.text import Text
 
 from melodine.core.config import AppConfig, save_config
 from melodine.core.shutdown import GracefulShutdown
 from melodine.db.database import Database
 from melodine.i18n import get_language, set_language, t
-from melodine.models import DownloadTask, ScoredCandidate
+from melodine.models import CODEC_PRESETS, DownloadTask, ScoredCandidate
 from melodine.services.doctor import run_checks
 from melodine.services.downloader import DownloadPool
 from melodine.services.exporter import Exporter
@@ -54,6 +55,7 @@ MENU_ITEMS = [
     ("7", "menu_doctor"),
     ("8", "menu_export"),
     ("9", "menu_settings"),
+    ("h", "menu_guide"),
     ("0", "menu_exit"),
 ]
 
@@ -128,7 +130,19 @@ class MelodineTUI:
     # dashboard & menu
     # ------------------------------------------------------------------ #
 
+    def _clear_screen(self) -> None:
+        """Redraw only interactive terminals; preserve redirected output."""
+        if console.is_terminal and not console.is_dumb_terminal:
+            console.clear()
+
+    def _screen(self, title: str) -> None:
+        self._clear_screen()
+        console.print(Text("Melodine", style=f"bold {self.theme.primary}"))
+        console.print(Text(title, style=f"bold {self.theme.subtitle}"))
+        console.print()
+
     def _draw_dashboard(self) -> None:
+        self._clear_screen()
         draw_banner(self.theme)
         stats = self.db.get_stats()
         track_count = self.db.count_tracks()
@@ -150,17 +164,19 @@ class MelodineTUI:
         info.add_row("Language / Язык", get_language().upper())
 
         menu_lines = "\n".join(
-            f"  [{self.theme.accent}][{key}][/]  {t(label)}" for key, label in MENU_ITEMS
+            f"  [{self.theme.accent}]\\[{key}][/]  {t(label)}" for key, label in MENU_ITEMS
         )
         console.print(
             Panel(
                 menu_lines,
                 title=f"[{self.theme.title}]Melodine[/]",
                 border_style=self.theme.border,
+                width=min(console.width, 76),
             )
         )
         console.print(info)
-        console.print(f"[{self.theme.muted}]{t('menu_hint')}[/]\n")
+        console.print(Text(t("menu_hint"), style=self.theme.muted))
+        console.print()
 
     def _main_menu(self) -> bool:
         """One menu iteration; returns False to exit."""
@@ -190,10 +206,14 @@ class MelodineTUI:
             "7": self.screen_doctor,
             "8": self.screen_export,
             "9": self.screen_settings,
+            "h": self.screen_guide,
         }
         handler = handlers.get(choice)
         if handler is not None:
             handler()
+        else:
+            console.print(t("invalid_value"))
+            self._wait_enter()
         return True
 
     def _wait_enter(self) -> None:
@@ -225,23 +245,43 @@ class MelodineTUI:
             save_config(self.cfg)
         console.print(f"[{self.theme.success}]{t('lang_changed')}[/]")
 
-    def _first_run_flow(self) -> None:
-        draw_banner(self.theme)
-        console.print(f"[{self.theme.subtitle}]{t('welcome_title')}[/]\n")
+    def _choose_language(self) -> None:
+        self._screen("Language / Язык")
+        console.print("  [1] Русский   •   [2] English", markup=False)
+        console.print("  Enter = current / текущий язык; 0 = back / назад", markup=False)
         choice = Prompt.ask(
-            f"[{self.theme.primary}]{t('welcome_lang')}[/]",
-            choices=["1", "2"],
-            default="1",
+            "Language / Язык",
+            choices=["1", "2", "0"],
+            default="1" if self.cfg.language == "ru" else "2",
         )
-        self.cfg.language = "ru" if choice == "1" else "en"
-        set_language(self.cfg.language)
-        with contextlib.suppress(OSError):
-            save_config(self.cfg)
+        if choice != "0":
+            self.cfg.language = "ru" if choice == "1" else "en"
+            set_language(self.cfg.language)
+            self._save()
+
+    def _first_run_flow(self) -> None:
+        self._choose_language()
+        self.screen_guide()
+
+    def screen_guide(self) -> None:
+        self._screen(t("guide_title"))
+        lines = [
+            t("guide_intro"),
+            "",
+            t("guide_search"),
+            t("guide_playlist"),
+            t("guide_settings"),
+            t("guide_doctor"),
+            t("guide_resume"),
+            "",
+            t("guide_output", path=str(Path(self.cfg.output.folder).expanduser().resolve())),
+            t("guide_navigation"),
+        ]
         console.print(
             Panel(
-                f"[{self.theme.info}]{t('welcome_text')}[/]\n"
-                f"[{self.theme.muted}]{t('welcome_hint')}[/]",
+                Text("\n".join(lines)),
                 border_style=self.theme.border,
+                width=min(console.width, 88),
             )
         )
         self._wait_enter()
@@ -273,6 +313,7 @@ class MelodineTUI:
         self.screen_queue()
 
     def screen_queue(self) -> None:
+        self._screen(t("queue_title"))
         if self.pool is None or self.pool.total == 0:
             console.print(f"[{self.theme.muted}]{t('queue_empty')}[/]")
             self._wait_enter()
@@ -324,8 +365,7 @@ class MelodineTUI:
     # ------------------------------------------------------------------ #
 
     def screen_search(self) -> None:
-        draw_banner(self.theme)
-        console.print(f"[{self.theme.subtitle}]{t('search_title')}[/]\n")
+        self._screen(t("search_title"))
         query = Prompt.ask(
             f"[{self.theme.primary}]{t('search_prompt')}[/]", default=""
         ).strip()
@@ -373,8 +413,7 @@ class MelodineTUI:
     # ------------------------------------------------------------------ #
 
     def screen_playlist(self) -> None:
-        draw_banner(self.theme)
-        console.print(f"[{self.theme.subtitle}]{t('pl_title')}[/]\n")
+        self._screen(t("pl_title"))
         path = Prompt.ask(
             f"[{self.theme.primary}]{t('pl_filepath')}[/]", default=""
         ).strip()
@@ -415,7 +454,7 @@ class MelodineTUI:
     # ------------------------------------------------------------------ #
 
     def screen_history(self) -> None:
-        draw_banner(self.theme)
+        self._screen(t("library_title"))
         stats = self.db.get_stats()
         if stats["total"] == 0 and self.db.count_tracks() == 0:
             console.print(f"[{self.theme.muted}]{t('history_empty')}[/]")
@@ -452,8 +491,7 @@ class MelodineTUI:
 
     def screen_watchlist(self) -> None:
         while True:
-            draw_banner(self.theme)
-            console.print(f"[{self.theme.subtitle}]{t('wl_title')}[/]\n")
+            self._screen(t("wl_title"))
             entries = self.watchlist.list()
 
             if entries:
@@ -476,10 +514,10 @@ class MelodineTUI:
                 console.print(f"[{self.theme.muted}]{t('wl_empty')}[/]")
 
             console.print(
-                f"[{self.theme.accent}][a][/] {t('wl_action_add')}   "
-                f"[{self.theme.accent}][s][/] {t('wl_action_sync')}   "
-                f"[{self.theme.accent}][r][/] {t('wl_action_remove')}   "
-                f"[{self.theme.accent}][0][/] {t('back')}"
+                f"[{self.theme.accent}]\\[a][/] {t('wl_action_add')}   "
+                f"[{self.theme.accent}]\\[s][/] {t('wl_action_sync')}   "
+                f"[{self.theme.accent}]\\[r][/] {t('wl_action_remove')}   "
+                f"[{self.theme.accent}]\\[0][/] {t('back')}"
             )
             action = Prompt.ask(
                 f"[{self.theme.primary}]{t('menu_prompt')}[/]", default="0"
@@ -493,6 +531,8 @@ class MelodineTUI:
                 self._watchlist_sync()
             elif action == "r":
                 self._watchlist_remove()
+            if action in {"a", "s", "r"}:
+                self._wait_enter()
 
     def _watchlist_add(self) -> None:
         url = Prompt.ask(f"[{self.theme.primary}]{t('wl_add_prompt')}[/]").strip()
@@ -537,8 +577,7 @@ class MelodineTUI:
     # ------------------------------------------------------------------ #
 
     def screen_lyrics_tool(self) -> None:
-        draw_banner(self.theme)
-        console.print(f"[{self.theme.subtitle}]{t('lyr_title')}[/]\n")
+        self._screen(t("lyr_title"))
         path = Prompt.ask(f"[{self.theme.primary}]{t('lyr_path_prompt')}[/]", default="").strip()
         if not path:
             return
@@ -603,7 +642,7 @@ class MelodineTUI:
     # ------------------------------------------------------------------ #
 
     def screen_doctor(self) -> None:
-        draw_banner(self.theme)
+        self._screen(t("doctor_title"))
         results = run_checks(self.cfg, self.db)
         status_colors = {
             "ok": self.theme.success,
@@ -637,14 +676,15 @@ class MelodineTUI:
         self._wait_enter()
 
     def screen_export(self) -> None:
-        draw_banner(self.theme)
-        console.print(f"[{self.theme.subtitle}]{t('export_title')}[/]\n")
+        self._screen(t("export_title"))
+        console.print("  [1] M3U8   [2] JSON", markup=False)
         fmt = Prompt.ask(
             f"[{self.theme.primary}]{t('export_format_prompt')}[/]",
             choices=["1", "2"],
             default="1",
         )
         fmt_key = "m3u8" if fmt == "1" else "json"
+        console.print(Text(t("export_scope_choices")))
         scope = Prompt.ask(
             f"[{self.theme.primary}]{t('export_scope_prompt')}[/]",
             choices=["1", "2"],
@@ -675,14 +715,13 @@ class MelodineTUI:
 
     def screen_settings(self) -> None:
         while True:
-            draw_banner(self.theme)
-            console.print(f"[{self.theme.subtitle}]{t('settings_title')}[/]\n")
+            self._screen(t("settings_title"))
             lines = "\n".join(
-                f"  [{self.theme.accent}][{key}][/]  {t(label)}"
+                f"  [{self.theme.accent}]\\[{key}][/]  {t(label)}"
                 for key, label in SETTINGS_ITEMS
             )
             console.print(
-                Panel(lines, border_style=self.theme.border)
+                Panel(lines, border_style=self.theme.border, width=min(console.width, 76))
             )
             choice = Prompt.ask(
                 f"[{self.theme.primary}]{t('settings_prompt')}[/]", default="0"
@@ -696,7 +735,7 @@ class MelodineTUI:
                 "5": self._settings_artwork,
                 "6": self._settings_paths,
                 "7": self._settings_theme,
-                "8": self._toggle_language,
+                "8": self._choose_language,
                 "9": self._settings_show,
                 "r": self._settings_reset,
             }
@@ -705,6 +744,10 @@ class MelodineTUI:
             handler = handlers.get(choice)
             if handler is not None:
                 handler()
+                self._wait_enter()
+            else:
+                console.print(t("invalid_value"))
+                self._wait_enter()
 
     def _save(self) -> None:
         try:
@@ -736,16 +779,32 @@ class MelodineTUI:
             console.print(f"[{self.theme.error}]{t('invalid_value')}[/]")
 
     def _settings_audio(self) -> None:
-        console.print(f"\n[{self.theme.subtitle}]{t('settings_audio')}[/]\n")
+        self._screen(t("settings_audio"))
+        codecs = list(CODEC_PRESETS)
+        current = self.cfg.audio.codec
+        for i, key in enumerate(codecs, 1):
+            marker = "▸" if key == current else " "
+            console.print(Text(f" {marker} {i}. {key.upper()} — {t(f'codec_help_{key}')}"))
+        console.print(Text(t("choice_hint"), style=self.theme.muted))
         codec = Prompt.ask(
-            f"[{self.theme.primary}]{t('cfg_codec')}[/]",
-            choices=["1", "2", "3", "4"],
-            default="2",
+            t("cfg_codec"),
+            choices=[str(i) for i in range(1, len(codecs) + 1)] + ["0"],
+            default=str(codecs.index(current) + 1),
         )
-        self.cfg.audio.codec = {"1": "opus", "2": "mp3", "3": "m4a", "4": "flac"}[codec]
-        self.cfg.audio.bitrate = self._ask_int(
-            t("cfg_bitrate", v=self.cfg.audio.bitrate), self.cfg.audio.bitrate, 32, 320
-        )
+        if codec == "0":
+            return
+        chosen = codecs[int(codec) - 1]
+        profile = CODEC_PRESETS[chosen]
+        self.cfg.audio.codec = chosen
+        if not profile.lossless:
+            default_bitrate = (
+                self.cfg.audio.bitrate if chosen == current else profile.default_bitrate
+            )
+            console.print(Text(t("bitrate_help"), style=self.theme.muted))
+            self.cfg.audio.bitrate = self._ask_int(
+                t("cfg_bitrate", v=default_bitrate), default_bitrate, 32, 320
+            )
+        console.print(Text(t("normalize_help"), style=self.theme.muted))
         self.cfg.audio.normalize = Confirm.ask(
             t("cfg_normalize"), default=self.cfg.audio.normalize
         )
@@ -756,6 +815,7 @@ class MelodineTUI:
                 -30.0,
                 -5.0,
             )
+        console.print(Text(t("threads_help"), style=self.theme.muted))
         self.cfg.download.threads = self._ask_int(
             t("cfg_threads", v=self.cfg.download.threads), self.cfg.download.threads, 1, 15
         )
@@ -771,7 +831,7 @@ class MelodineTUI:
         self._save()
 
     def _settings_search(self) -> None:
-        console.print(f"\n[{self.theme.subtitle}]{t('settings_search')}[/]\n")
+        self._screen(t("settings_search"))
         self.cfg.search.anti_mv = Confirm.ask(t("cfg_anti_mv"), default=self.cfg.search.anti_mv)
         self.cfg.search.results = self._ask_int(
             t("cfg_results", v=self.cfg.search.results), self.cfg.search.results, 3, 30
@@ -785,7 +845,7 @@ class MelodineTUI:
         self._save()
 
     def _settings_sponsorblock(self) -> None:
-        console.print(f"\n[{self.theme.subtitle}]{t('settings_sponsorblock')}[/]\n")
+        self._screen(t("settings_sponsorblock"))
         self.cfg.sponsorblock.enabled = Confirm.ask(
             t("cfg_sb_enabled"), default=self.cfg.sponsorblock.enabled
         )
@@ -802,14 +862,14 @@ class MelodineTUI:
         self._save()
 
     def _settings_lyrics(self) -> None:
-        console.print(f"\n[{self.theme.subtitle}]{t('settings_lyrics')}[/]\n")
+        self._screen(t("settings_lyrics"))
         self.cfg.lyrics.enabled = Confirm.ask(t("cfg_ly_enabled"), default=self.cfg.lyrics.enabled)
         self.cfg.lyrics.synced = Confirm.ask(t("cfg_ly_synced"), default=self.cfg.lyrics.synced)
         self.cfg.lyrics.save_lrc = Confirm.ask(t("cfg_ly_lrc"), default=self.cfg.lyrics.save_lrc)
         self._save()
 
     def _settings_artwork(self) -> None:
-        console.print(f"\n[{self.theme.subtitle}]{t('settings_artwork')}[/]\n")
+        self._screen(t("settings_artwork"))
         self.cfg.artwork.embed = Confirm.ask(t("cfg_aw_embed"), default=self.cfg.artwork.embed)
         self.cfg.artwork.crop = Confirm.ask(t("cfg_aw_crop"), default=self.cfg.artwork.crop)
         self.cfg.metadata.enrich = Confirm.ask(
@@ -819,7 +879,7 @@ class MelodineTUI:
         self._save()
 
     def _settings_paths(self) -> None:
-        console.print(f"\n[{self.theme.subtitle}]{t('settings_paths')}[/]\n")
+        self._screen(t("settings_paths"))
         console.print(
             f"[{self.theme.muted}]{t('paths_current')}[/] "
             f"[{self.theme.primary}]{self.cfg.output.folder}[/]"
@@ -830,17 +890,26 @@ class MelodineTUI:
         self._save()
 
     def _settings_theme(self) -> None:
-        console.print(f"\n[{self.theme.subtitle}]{t('settings_theme')}[/]\n")
+        self._screen(t("settings_theme"))
         labels = list_themes()
         console.print(f"[{self.theme.muted}]{t('theme_current')}[/] {self.theme.label}\n")
         for i, (key, label) in enumerate(labels, 1):
-            marker = "▸" if key == self.cfg.theme else " "
-            console.print(f"  [{self.theme.muted}]{marker} {i}.[/] {label}")
-        choice = IntPrompt.ask(
-            f"[{self.theme.primary}]{t('theme_select')}[/]", default=1
+            palette = get_theme(key)
+            marker = "▸" if key == self.theme.name else " "
+            row = Text(f" {marker} {i:>2}. {label:<12} ")
+            for color in (palette.primary, palette.secondary, palette.accent,
+                          palette.success, palette.warning, palette.error):
+                row.append("██ ", style=color)
+            console.print(row)
+        console.print(Text(t("choice_hint"), style=self.theme.muted))
+        default = self._theme_keys.index(self.theme.name) + 1
+        choice = Prompt.ask(
+            t("theme_select"),
+            choices=[str(i) for i in range(1, len(labels) + 1)] + ["0"],
+            default=str(default),
         )
-        if 1 <= choice <= len(labels):
-            self.cfg.theme = labels[choice - 1][0]
+        if choice != "0":
+            self.cfg.theme = labels[int(choice) - 1][0]
             self.theme = get_theme(self.cfg.theme)
             self._save()
             console.print(
@@ -848,6 +917,7 @@ class MelodineTUI:
             )
 
     def _settings_show(self) -> None:
+        self._screen(t("config_title"))
         table = Table(
             title=t("config_title"), border_style=self.theme.border, box=box.ROUNDED
         )
@@ -876,6 +946,7 @@ class MelodineTUI:
         console.print(table)
 
     def _settings_reset(self) -> None:
+        self._screen(t("settings_reset"))
         if Confirm.ask(t("settings_reset_confirm"), default=False):
             from melodine.core.config import AppConfig
 
