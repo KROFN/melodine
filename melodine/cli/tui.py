@@ -104,6 +104,7 @@ class MelodineTUI:
         try:
             if self.first_run:
                 self._first_run_flow()
+            self._terminal_notice()
             self._offer_resume()
             while not self.shutdown.triggered:
                 try:
@@ -318,6 +319,41 @@ class MelodineTUI:
     def _first_run_flow(self) -> None:
         self._choose_language()
         self.screen_guide()
+
+    def _terminal_notice(self) -> None:
+        """Offer a modern terminal without blocking unattended commands."""
+        if (
+            not self.cfg.show_legacy_terminal_notice
+            or not IS_WINDOWS
+            or not console.legacy_windows
+            or not console.is_terminal
+            or console.is_dumb_terminal
+            or not shell.keyboard_available(console)
+        ):
+            return
+        tr = shell.tr
+        self._screen(tr("Рекомендация", "Terminal recommendation"))
+        body = Text(tr(
+            "Вы используете классическую консоль Windows. Melodine работает и здесь, "
+            "но цвета и возможности оформления могут быть ограничены.\n\n"
+            "Для лучшего отображения рекомендуем Windows Terminal (wt). "
+            "В нём можно использовать как CMD, так и PowerShell.",
+            "You are using the classic Windows console. Melodine works here, "
+            "but colors and presentation may be limited.\n\n"
+            "For the best appearance, use Windows Terminal (wt). "
+            "Both CMD and PowerShell are supported.",
+        ))
+        console.print(shell.panel(console, self.theme, body,
+                                  tr("О терминале", "About your terminal")))
+        console.print()
+        choice = shell.select(
+            console, self.theme, tr("Продолжить", "Continue"),
+            [("0", "OK"), ("1", tr("Больше не показывать", "Don't show again"))],
+            default="0",
+        )
+        if choice == "1":
+            self.cfg.show_legacy_terminal_notice = False
+            self._save()
 
     def screen_guide(self) -> None:
         self._screen(t("guide_title"))
