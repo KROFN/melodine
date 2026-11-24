@@ -323,3 +323,29 @@ def test_unrelated_official_audio_claim_cannot_beat_matching_verified_source():
     ranked = rank_candidates([repost, official], target_artist="Muse", target_title="Hysteria")
     assert ranked[0].candidate is official
     assert any(r.key == "score_reason_audio_claim" for r in ranked[1].reasons)
+
+@pytest.mark.parametrize("channel", ["Muse", "Muse - Topic", "Other channel"])
+@pytest.mark.parametrize("anti_mv", [True, False])
+def test_wrong_song_cannot_outrank_matching_title(channel, anti_mv):
+    wrong = SearchCandidate(title="Muse - Starlight (Official Audio)", channel=channel,
+                            channel_is_verified=True, duration=227)
+    right = SearchCandidate(title="Hysteria", channel="Unknown", duration=227)
+    ranked = rank_candidates([wrong, right], target_artist="Muse", target_title="Hysteria",
+                             expected_duration=227, penalize=anti_mv)
+    assert ranked[0].candidate is right
+    assert ranked[1].score == 0
+    assert any(r.key == "score_penalty_title_mismatch" for r in ranked[1].reasons)
+    assert all(r.points <= 0 for r in ranked[1].reasons)
+
+
+@pytest.mark.parametrize("title", [
+    "Muse - Hysteria (Live at Wembley)",
+    "Hysteria - Live at Wembley",
+    "Hysteria - Official Audio",
+    "Muse feat. Other - Hysteria (Official Audio)",
+])
+def test_title_gate_keeps_known_variants_and_featured_credits(title):
+    scored = score_candidate(candidate(title, channel="Muse"),
+                             target_artist="Muse", target_title="Hysteria",
+                             intent=IntentFlags(live=True))
+    assert not any(r.key == "score_penalty_title_mismatch" for r in scored.reasons)

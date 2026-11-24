@@ -4,6 +4,35 @@ All notable changes to Melodine are documented here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
 and the project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.1.0] - Interactive experience and smarter source selection
+
+### Added
+
+- Compact keyboard-driven workspace for modern terminals, with a classic
+  console fallback, bilingual onboarding, codec explanations, theme previews
+  and a repeatable quick-start guide.
+- Dismissible Windows Terminal recommendation and regional connectivity guidance.
+- Channel verification and artist matching in the scorer, conservative
+  cross-script title matching and corroborated artist-name typo handling.
+- Score explanations including the base score, individual signals and final score.
+- Explicit download pipeline stages, from source lookup through tagging and
+  library persistence.
+
+### Fixed
+
+- Unrelated tracks cannot collect source, artist or duration bonuses when the
+  requested track title has insufficient matching evidence. Smart Search
+  retries mismatches; automatic selection rejects unresolved mismatches while
+  manual result selection remains available.
+- Explicit CLI result indexes use a single ranked result set and reject invalid
+  indexes rather than silently choosing another result.
+- Configured bitrates are respected; a different codec uses its own default
+  bitrate unless explicitly overridden.
+- Output folder changes show the resolved path, require confirmation and check
+  write access before saving.
+- Cross-platform offline tests allow the standard library's internal socketpair
+  while continuing to block arbitrary network connections.
+
 ## [2.0.1] - Review patch: correctness & release hardening
 
 Targeted fixes from the external PR review — no new features, only

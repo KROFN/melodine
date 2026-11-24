@@ -6,7 +6,7 @@ while shipping a production-grade v2 architecture.
 
 from __future__ import annotations
 
-__version__ = "2.0.1"
+__version__ = "2.1.0"
 __author__ = "KROFN"
 __app_name__ = "Melodine"
 __user_agent__ = f"Melodine/{__version__} (https://github.com/KROFN/melodine)"

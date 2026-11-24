@@ -8,7 +8,7 @@ build-backend = "hatchling.build"
 # distribution is published as "krofn-melodine". The import package and
 # the console commands stay "melodine" / "mld" - the UX does not change.
 name = "krofn-melodine"
-version = "2.0.1"
+version = "2.1.0"
 description = "Flagship YouTube music downloader: studio-audio scoring, SponsorBlock cuts, synced karaoke lyrics, smart artwork and EBU R128 normalization - in a rich TUI and a fast headless CLI."
 readme = "README.md"
 requires-python = ">=3.10"
@@ -48,6 +48,7 @@ dependencies = [
     "yt-dlp>=2024.12.13",
     "rich>=13.7.0",
     "InquirerPy>=0.3.4,<0.4",
+    "prompt-toolkit>=3.0.36,<4",
     "typer>=0.12.5",
     "pydantic>=2.6.0",
     "PyYAML>=6.0.1",

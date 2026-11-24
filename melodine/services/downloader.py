@@ -141,31 +141,19 @@ class DownloadService:
         """Return ``(url, artist_hint, title_hint, candidate)`` for a task."""
         if task.url:
             return task.url, task.artist, task.title, None
-        best, _scored = self.search.best(
+        best, scored = self.search.best(
             task.query,
             intent=task.intent,
             target_title=task.title,
             target_artist=task.artist,
         )
-        if best is None:
-            raise RuntimeError("no search results")
         index = self.options.index
-        if index and index > 1:
-            # Caller picked a specific result: re-run search for the list.
-            _top, scored = self.search.best(
-                task.query,
-                intent=task.intent,
-                target_title=task.title,
-                target_artist=task.artist,
-            )
-            if 0 < index <= len(scored):
-                chosen = scored[index - 1]
-                return (
-                    chosen.candidate.url,
-                    task.artist or chosen.candidate.channel,
-                    task.title or chosen.candidate.title,
-                    chosen.candidate,
-                )
+        if index is not None:
+            if not 0 < index <= len(scored):
+                raise RuntimeError("search result index out of range")
+            best = scored[index - 1]
+        if best is None:
+            raise RuntimeError("no matching search results" if scored else "no search results")
         return (
             best.candidate.url,
             task.artist or best.candidate.channel,

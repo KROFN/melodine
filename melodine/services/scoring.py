@@ -171,8 +171,25 @@ def score_candidate(
         score += points
         reasons.append(ScoreReason(key=key, points=points, value=value))
 
-    credited_artist, track_title = parse_artist_title(clean_track_title(candidate.title).title)
+    credited_artist, raw_title = parse_artist_title(candidate.title)
+    track_title = clean_track_title(raw_title).title
+    # A separator can introduce a version label, rather than artist credits.
+    if credited_artist and not track_title:
+        credited_artist, track_title = "", clean_track_title(candidate.title).title
     track_title = _UPLOAD_SUFFIX.sub("", track_title)
+    # Recognize a known version suffix when the requested base title is exact.
+    # Keep the original text for the version penalties below.
+    if target_title:
+        for match in re.finditer(r"\s*[\[(]([^\]\)]+)[\])]\s*$", track_title):
+            suffix = match.group(1)
+            base = track_title[:match.start()].strip()
+            if (_name_key(base) == _name_key(target_title)
+                    and any(pattern.search(suffix) for pattern, _ in _INTENT_FLAGS_BY_PATTERN)):
+                track_title = base
+                break
+        if (credited_artist and _name_key(credited_artist) == _name_key(target_title)
+                and any(pattern.search(raw_title) for pattern, _ in _INTENT_FLAGS_BY_PATTERN)):
+            track_title, credited_artist = credited_artist, ""
     channel_artist = _TOPIC_SUFFIX.sub("", candidate.channel)
     requested = _credits(target_artist)
     channel_key = _name_key(channel_artist)
@@ -183,19 +200,23 @@ def score_candidate(
         _name_key(track_title) == _name_key(target_title)
         or _cross_script_title_match(track_title, target_title)
     )
+    similarity = token_similarity(_name_key(track_title), _name_key(target_title))
+    relevant = not target_title or title_match or similarity >= 0.5
+    if not relevant:
+        _add("score_penalty_title_mismatch", -BASE_SCORE)
     # A typo is only accepted when the channel's whole name also occurs in
     # the video's artist credits and the requested track title matches.
     corroborated_typo = title_match and channel_key in credits and any(
         _one_edit_name(name, channel_key) for name in requested
     )
-    if channel_match or credit_match or corroborated_typo:
+    if relevant and (channel_match or credit_match or corroborated_typo):
         _add("score_reason_artist_match", 20)
     if (candidate.channel_is_verified is True and title_match
             and (channel_match or corroborated_typo)):
         _add("score_reason_verified_artist", 15)
 
     # -- positive signals (studio audio) --------------------------------------
-    if penalize:
+    if penalize and relevant:
         if _TOPIC_SUFFIX.search(candidate.channel) and (
             not requested or channel_match or corroborated_typo
         ):
@@ -211,7 +232,7 @@ def score_candidate(
             _add("score_reason_lyrics", 5)
 
     # -- duration match --------------------------------------------------------
-    if expected_duration and expected_duration > 0 and candidate.duration > 0:
+    if relevant and expected_duration and expected_duration > 0 and candidate.duration > 0:
         delta = abs(candidate.duration - expected_duration)
         if delta <= 2:
             _add("score_reason_duration_exact", 25)
@@ -228,7 +249,6 @@ def score_candidate(
         elif _cross_script_title_match(cleaned, target_title):
             _add("score_reason_title_transliterated", 10)
         else:
-            similarity = token_similarity(cleaned, target_title)
             if similarity >= 0.5:
                 _add("score_reason_title_similar", int(15 * similarity),
                      f"{int(similarity * 100)}%")
@@ -244,7 +264,7 @@ def score_candidate(
         if getattr(intent, "sped", False) and _P_ALT_MIX.search(text):
             matched.add("sped")
 
-        if matched:
+        if matched and relevant:
             # The user explicitly requested this variant: reward it.
             _add("score_reason_intent_match", 15, ", ".join(sorted(matched)))
 
@@ -292,8 +312,13 @@ def score_candidate(
     return ScoredCandidate(candidate=candidate, score=final, reasons=reasons)
 
 
-def ranking_key(item: ScoredCandidate) -> tuple[int, int]:
-    return item.score, sum(reason.points for reason in item.reasons)
+def title_relevant(item: ScoredCandidate) -> bool:
+    """False when a supplied target title has no sufficient matching evidence."""
+    return not any(r.key == "score_penalty_title_mismatch" for r in item.reasons)
+
+
+def ranking_key(item: ScoredCandidate) -> tuple[int, bool, int]:
+    return item.score, title_relevant(item), sum(reason.points for reason in item.reasons)
 
 
 def rank_candidates(

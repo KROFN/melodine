@@ -127,8 +127,6 @@ class SearchService:
         enabled, additional audio-biased query variants are merged in.
         """
         candidates = self.search(query)
-        if not candidates and self.cfg.download.smart_search:
-            candidates = self.smart_search(target_artist or "", query)
 
         scored = scoring.rank_candidates(
             candidates,
@@ -143,12 +141,18 @@ class SearchService:
             self.cfg.download.smart_search
             and (
                 not scored
+                or not scoring.title_relevant(scored[0])
                 or scored[0].score < self.cfg.search.min_score
                 or (self.cfg.search.anti_mv and not scored[0].reasons)
             )
         ):
             seen = {item.candidate.source_id for item in scored}
-            for variant in (f"{query} audio", f"{query} official audio", f"{query} topic"):
+            variants = [f"{query} audio", f"{query} official audio", f"{query} topic"]
+            if target_artist and not any(scoring.title_relevant(item) for item in scored):
+                variants.extend(generate_search_queries(target_artist, target_title or query))
+            for variant in dict.fromkeys(variants):
+                if variant == query:
+                    continue
                 for extra in scoring.rank_candidates(
                     self.search(variant),
                     target_title=target_title,
@@ -162,4 +166,7 @@ class SearchService:
                         scored.append(extra)
             scored.sort(key=scoring.ranking_key, reverse=True)
 
-        return (scored[0] if scored else None), scored
+        # Keep mismatches visible for manual selection, but never auto-pick
+        # a different song just because its uploader is authoritative.
+        best = next((item for item in scored if scoring.title_relevant(item)), None)
+        return best, scored

@@ -346,11 +346,15 @@ def test_guide_network_notice_is_bounded(ui, monkeypatch, lang, heading):
     lines = output.getvalue().splitlines()
     notice_start = next(i for i, line in enumerate(lines) if heading in line)
     title_line = lines[notice_start]
-    assert "╭" in title_line and "╮" in title_line
+    assert title_line.strip().startswith(("╭", "┌"))
+    assert title_line.strip().endswith(("╮", "┐"))
     # Only whitespace separates the two panels.
     previous = next(line for line in reversed(lines[:notice_start]) if line.strip())
-    assert previous.strip().startswith("╰")
-    notice_end = next(i for i in range(notice_start, len(lines)) if "╰" in lines[i])
+    assert previous.strip().startswith(("╰", "└"))
+    notice_end = next(
+        i for i in range(notice_start, len(lines))
+        if lines[i].strip().startswith(("╰", "└"))
+    )
     folder_label = "Папка музыки" if lang == "ru" else "Music folder"
     folder_line = next(i for i, line in enumerate(lines) if line.strip() == folder_label)
     resume_line = next(i for i, line in enumerate(lines) if "Ctrl+C" in line)
