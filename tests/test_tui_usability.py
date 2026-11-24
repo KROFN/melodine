@@ -41,9 +41,12 @@ def test_menu_keys_and_guide_visible(ui):
     assert "\x1b[2J" not in output.getvalue()
 
 
-def test_clear_only_on_interactive_terminal(ui, monkeypatch):
+@pytest.mark.parametrize("windows", [False, True])
+def test_clear_only_on_interactive_terminal(ui, monkeypatch, windows):
     app, _ = ui
     calls = []
+    monkeypatch.setattr(tui_module, "IS_WINDOWS", windows)
+    monkeypatch.setattr(tui_module.os, "system", lambda cmd: calls.append(cmd) or 0)
 
     class FakeTerminal:
         is_terminal = True
@@ -60,7 +63,7 @@ def test_clear_only_on_interactive_terminal(ui, monkeypatch):
     terminal.is_terminal = True
     terminal.is_dumb_terminal = True
     app._clear_screen()
-    assert calls == ["clear"]
+    assert calls == (["cls"] if windows else ["clear"])
 
 
 def test_language_default_is_current(ui, monkeypatch):
