@@ -9,6 +9,30 @@ from __future__ import annotations
 
 _strings: dict[str, dict[str, str]] = {
     "ru": {
+        "guide_network": (
+            "Если YouTube недоступен в вашем регионе (в том числе в РФ), проверьте "
+            "доступ к нему из той же системы. При необходимости используйте "
+            "разрешённые местным законодательством сетевые решения (VPN или zapret)."
+        ),
+        "paths_help": (
+            "Вставьте путь к папке (можно в кавычках). Относительный путь считается "
+            "от текущей рабочей папки. Пустой Enter — отмена."
+        ),
+        "paths_resolved": "Полный путь: {path}",
+        "paths_confirm": "Использовать эту папку?",
+        "paths_create": "Папки пока нет. Создать и использовать её?",
+        "stage_resolve": "Поиск источника",
+        "stage_inspect": "Получение информации",
+        "stage_metadata": "Поиск метаданных",
+        "stage_prepare": "Подготовка загрузки",
+        "stage_sponsorblock": "Проверка SponsorBlock",
+        "stage_convert": "Обработка аудио (FFmpeg)",
+        "stage_cut": "Удаление сегментов",
+        "stage_normalize": "Нормализация громкости",
+        "stage_artwork": "Загрузка обложки",
+        "stage_lyrics": "Поиск текста",
+        "stage_tags": "Запись тегов",
+        "stage_persist": "Сохранение в медиатеке",
         "menu_guide": "Быстрый старт / Справка",
         "guide_title": "Быстрый старт",
         "guide_intro": "Melodine: скачивайте музыку и собирайте локальную медиатеку.",
@@ -152,7 +176,7 @@ _strings: dict[str, dict[str, str]] = {
         ),
         "queue_resumed": "Возобновлено загрузок из прошлой сессии: {n}",
         "queue_resume_prompt": "Найдено {n} незавершённых загрузок. Возобновить?",
-        "queue_return_hint": "Enter - обновить, Esc/Ctrl+C - прервать",
+        "queue_return_hint": "Обновляется автоматически · Ctrl+C — остановка",
         # -- result panel --
         "panel_result": "Результат",
         "result_ok": "Скачано:",
@@ -361,6 +385,30 @@ _strings: dict[str, dict[str, str]] = {
         "dedup_skipped": "Дубликат: {title}",
     },
     "en": {
+        "guide_network": (
+            "If YouTube is unavailable in your region (including Russia), check "
+            "access from the same system. Where lawful, use a suitable network "
+            "solution (VPN or zapret)."
+        ),
+        "paths_help": (
+            "Paste a folder path (quotes accepted). Relative paths are resolved from "
+            "the working directory. Empty Enter cancels."
+        ),
+        "paths_resolved": "Resolved path: {path}",
+        "paths_confirm": "Use this folder?",
+        "paths_create": "Folder does not exist. Create and use it?",
+        "stage_resolve": "Finding source",
+        "stage_inspect": "Inspecting source",
+        "stage_metadata": "Finding metadata",
+        "stage_prepare": "Preparing download",
+        "stage_sponsorblock": "Checking SponsorBlock",
+        "stage_convert": "Processing audio (FFmpeg)",
+        "stage_cut": "Removing segments",
+        "stage_normalize": "Normalizing loudness",
+        "stage_artwork": "Fetching artwork",
+        "stage_lyrics": "Finding lyrics",
+        "stage_tags": "Writing tags",
+        "stage_persist": "Saving to library",
         "menu_guide": "Quick start / Help",
         "guide_title": "Quick start",
         "guide_intro": "Melodine: download music and build a local library.",
@@ -493,7 +541,7 @@ _strings: dict[str, dict[str, str]] = {
         "queue_saved_state": "Saved {n} unfinished downloads. Run Melodine again to resume.",
         "queue_resumed": "Resumed downloads from last session: {n}",
         "queue_resume_prompt": "Found {n} unfinished downloads. Resume them?",
-        "queue_return_hint": "Enter - refresh, Esc/Ctrl+C - interrupt",
+        "queue_return_hint": "Updates automatically · Ctrl+C — stop",
         # -- result panel --
         "panel_result": "Result",
         "result_ok": "Downloaded:",
