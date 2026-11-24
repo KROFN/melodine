@@ -121,7 +121,12 @@ class DownloadService:
     def effective_profile(self) -> tuple[CodecProfile, int]:
         codec_key = str(self._opt("codec", self.cfg.audio.codec))
         profile = get_codec_profile(codec_key)
-        bitrate = int(self._opt("bitrate", self.cfg.audio.bitrate) or profile.default_bitrate)
+        configured_bitrate = (
+            self.cfg.audio.bitrate
+            if codec_key == self.cfg.audio.codec
+            else profile.default_bitrate
+        )
+        bitrate = int(self._opt("bitrate", configured_bitrate) or profile.default_bitrate)
         if profile.lossless:
             bitrate = 0
         return profile, bitrate
@@ -198,8 +203,6 @@ class DownloadService:
         quality: str | None
         if profile.lossless:
             quality = None
-        elif profile.yt_quality and not self._opt("bitrate", None):
-            quality = profile.yt_quality
         else:
             quality = str(bitrate) if bitrate else profile.yt_quality
 
