@@ -12,21 +12,50 @@ _strings: dict[str, dict[str, str]] = {
         "menu_guide": "Быстрый старт / Справка",
         "guide_title": "Быстрый старт",
         "guide_intro": "Melodine: скачивайте музыку и собирайте локальную медиатеку.",
-        "guide_search": "1 — Поиск: введите «Исполнитель - Трек» или ссылку YouTube. Выберите нужный результат по номеру.",
+        "guide_search": (
+            "1 — Поиск: введите «Исполнитель - Трек» или ссылку YouTube. Выберите нужный "
+            "результат по номеру."
+        ),
         "guide_playlist": "2 — Плейлист: укажите путь к .txt (один трек на строку).",
-        "guide_settings": "9 — Настройки: выберите формат аудио, папку, тему и язык. MP3 — универсальный вариант.",
+        "guide_settings": (
+            "9 — Настройки: выберите формат аудио, папку, тему и язык. MP3 — универсальный "
+            "вариант."
+        ),
         "guide_doctor": "7 — Диагностика: проверьте FFmpeg и доступность внешних сервисов.",
-        "guide_resume": "Ctrl+C — остановка загрузки. При следующем запуске можно продолжить сохранённую очередь.",
+        "guide_resume": (
+            "Ctrl+C — остановка загрузки. При следующем запуске можно продолжить "
+            "сохранённую очередь."
+        ),
         "guide_output": "Папка музыки: {path}",
-        "guide_navigation": "Введите номер действия и нажмите Enter. h — эта справка, t — тема, g — язык, q — выход.",
-        "codec_help_opus": "Эффективное сжатие; меньше файловый размер. 160 кбит/с — хороший ориентир.",
-        "codec_help_mp3": "Самая широкая совместимость, в том числе старые плееры. Пресет 320 кбит/с.",
+        "guide_navigation": (
+            "Введите номер действия и нажмите Enter. h — эта справка, t — тема, g — язык, "
+            "q — выход."
+        ),
+        "codec_help_opus": (
+            "Эффективное сжатие; меньше файловый размер. 160 кбит/с — хороший ориентир."
+        ),
+        "codec_help_mp3": (
+            "Самая широкая совместимость, в том числе старые плееры. Пресет 320 кбит/с."
+        ),
         "codec_help_m4a": "AAC в контейнере M4A; удобно для устройств Apple. Пресет 256 кбит/с.",
-        "codec_help_flac": "Без потерь при кодировании, крупные файлы. Не улучшает исходное качество YouTube.",
-        "choice_hint": "Введите номер и Enter. Enter без номера — сохранить текущий выбор; 0 — назад.",
-        "bitrate_help": "Целевой битрейт: больше — обычно крупнее файл; качество ограничено источником.",
-        "normalize_help": "Нормализация выравнивает воспринимаемую громкость; может потребовать перекодирования.",
-        "threads_help": "Число параллельных загрузок. 2–4 обычно достаточно; больше — выше нагрузка.",
+        "codec_help_flac": (
+            "Без потерь при кодировании, крупные файлы. Не улучшает исходное качество "
+            "YouTube."
+        ),
+        "choice_hint": (
+            "Введите номер и Enter. Enter без номера — сохранить текущий выбор; 0 — назад."
+        ),
+        "bitrate_help": (
+            "Целевой битрейт: больше — обычно крупнее файл; качество ограничено "
+            "источником."
+        ),
+        "normalize_help": (
+            "Нормализация выравнивает воспринимаемую громкость; может потребовать "
+            "перекодирования."
+        ),
+        "threads_help": (
+            "Число параллельных загрузок. 2–4 обычно достаточно; больше — выше нагрузка."
+        ),
         "export_scope_choices": "  [1] Медиатека   [2] История",
         # -- common --
         "app_tagline": "Твой плейлист. Скачан. Красиво.",
@@ -327,19 +356,40 @@ _strings: dict[str, dict[str, str]] = {
         "menu_guide": "Quick start / Help",
         "guide_title": "Quick start",
         "guide_intro": "Melodine: download music and build a local library.",
-        "guide_search": "1 — Search: enter Artist - Track or a YouTube URL. Choose a result by its number.",
+        "guide_search": (
+            "1 — Search: enter Artist - Track or a YouTube URL. Choose a result by its "
+            "number."
+        ),
         "guide_playlist": "2 — Playlist: enter a path to a .txt file (one track per line).",
-        "guide_settings": "9 — Settings: choose the audio format, output folder, theme and language. MP3 is a versatile choice.",
+        "guide_settings": (
+            "9 — Settings: choose the audio format, output folder, theme and language. MP3 "
+            "is a versatile choice."
+        ),
         "guide_doctor": "7 — Doctor: check FFmpeg and connectivity to external services.",
-        "guide_resume": "Ctrl+C — stop a download. On the next launch, you can resume a saved queue.",
+        "guide_resume": (
+            "Ctrl+C — stop a download. On the next launch, you can resume a saved queue."
+        ),
         "guide_output": "Music folder: {path}",
-        "guide_navigation": "Enter an action number and press Enter. h — this guide, t — theme, g — language, q — quit.",
-        "codec_help_opus": "Efficient compression for smaller files. 160 kbps is a good starting point.",
+        "guide_navigation": (
+            "Enter an action number and press Enter. h — this guide, t — theme, g — "
+            "language, q — quit."
+        ),
+        "codec_help_opus": (
+            "Efficient compression for smaller files. 160 kbps is a good starting point."
+        ),
         "codec_help_mp3": "Broad compatibility, including older players. 320 kbps preset.",
         "codec_help_m4a": "AAC in an M4A container; convenient for Apple devices. 256 kbps preset.",
-        "codec_help_flac": "Lossless encoding, larger files. Cannot improve the original YouTube audio.",
-        "choice_hint": "Type a number and press Enter. Enter alone keeps the current choice; 0 goes back.",
-        "bitrate_help": "Target bitrate: higher usually means larger files; quality is limited by the source.",
+        "codec_help_flac": (
+            "Lossless encoding, larger files. Cannot improve the original YouTube audio."
+        ),
+        "choice_hint": (
+            "Type a number and press Enter. Enter alone keeps the current choice; 0 goes "
+            "back."
+        ),
+        "bitrate_help": (
+            "Target bitrate: higher usually means larger files; quality is limited by the "
+            "source."
+        ),
         "normalize_help": "Normalization evens out perceived loudness and may require re-encoding.",
         "threads_help": "Parallel downloads. 2–4 is usually enough; more increases resource use.",
         "export_scope_choices": "  [1] Library   [2] History",
